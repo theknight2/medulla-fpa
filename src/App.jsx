@@ -37,12 +37,12 @@ function Pix({id,size,mood,bounce,anim,frame}){var s=size||40;var p=PAL[id];if(!
 var AGENTS_REF=[];
 /* ── ACTION DIALOGS — dynamic text driven by the routing plan task ── */
 var ACTION_DIALOGS={
-  maya:{"default":["Routing to specialists...","Decomposing task...","Collecting specialist outputs...","Synthesizing executive brief..."]},
-  raj:{"Variance bridge analysis":["Building variance bridge...","Isolating volume vs rate impact...","Decomposing regional miss..."],"Regional P&L analysis":["Computing regional EBITDA...","Aggregating expense line items...","Calculating margin spread..."],"Expense variance analysis":["Scanning expense categories...","Budget vs actual by line...","Flagging overruns..."],"Regional variance":["Extracting regional variance...","Decomposing revenue miss...","Bridge analysis running..."],"Variance overview":["Revenue variance scan...","Isolating -$K drivers...","Bridge complete"],"default":["Isolating volume variance...","Rate impact: calculating...","Decomposing regional miss..."]},
-  priya:{"Denial/AR analysis":["Scanning denial codes by region...","Computing DSO and AR aging...","Quantifying recovery opportunity..."],"default":["Scanning denial codes...","CO-4: AT modifier miss...","Scrubbing claims..."]},
-  alex:{"Forecast modeling":["Running 3 scenarios...","Base case: current trajectory...","Upside: denial fix + growth..."],"default":["Running 3 scenarios...","Forecasting month 7..."]},
-  sam:{"PE commentary / SSS analysis":["Evaluating CAC efficiency...","Analyzing Same-Store Sales...","Drafting Vistria commentary..."],"Executive summary":["Compiling board metrics...","PE-grade KPI formatting...","Lead with the number..."],"default":["PE format: 3 paras...","Reading regional_metrics...","Polishing commentary..."]},
-  jordan:{"Ops / provider analysis":["Extracting regional utilization...","Computing tech-to-doc ratios...","Scoring clinic health..."],"Health scoring":["Scanning clinic vitals...","Risk flagging by region...","Ranking health scores..."],"default":["Reading regional_metrics...","Utilization scan...","Ranking regions..."]}
+  maya:{"default":["Routing specialists...","Decomposing task...","Collecting outputs...","Synthesizing brief..."]},
+  raj:{"Variance bridge analysis":["Building variance bridge...","Volume vs rate impact...","Decomposing miss..."],"Regional P&L analysis":["Computing EBITDA...","Aggregating expenses...","Calculating margins..."],"Expense variance analysis":["Scanning expenses...","Budget vs actual...","Flagging overruns..."],"Regional variance":["Regional variance...","Revenue miss drivers...","Bridge running..."],"Variance overview":["Revenue variance scan...","Isolating drivers...","Bridge complete"],"default":["Volume variance...","Rate impact calc...","Regional miss..."]},
+  priya:{"Denial/AR analysis":["Scanning denial codes...","Computing DSO + aging...","Recovery modeling..."],"default":["Scanning denials...","CO-4: modifier miss...","Scrubbing claims..."]},
+  alex:{"Forecast modeling":["Running 3 scenarios...","Base case trajectory...","Upside: fix + growth..."],"default":["Running scenarios...","Forecasting month 7..."]},
+  sam:{"PE commentary / SSS analysis":["CAC efficiency scan...","SSS metrics analysis...","Vistria commentary..."],"Executive summary":["Board metrics...","PE-grade formatting...","Lead with number..."],"default":["PE format: 3 paras...","Regional metrics...","Polishing commentary..."]},
+  jordan:{"Ops / provider analysis":["Regional utilization...","Tech-to-doc ratios...","Clinic health scoring..."],"Health scoring":["Scanning vitals...","Risk flagging...","Ranking health..."],"default":["Regional metrics...","Utilization scan...","Ranking regions..."]}
 };
 var DESK_POS={maya:{x:310,y:40},raj:{x:40,y:200},priya:{x:170,y:200},alex:{x:300,y:200},sam:{x:430,y:200},jordan:{x:560,y:200}};
 
@@ -197,14 +197,14 @@ function LiveOffice({scene,handoffs,ebitdaVar,agents,decomp}){
           var a=(agents||AGENTS_REF).find(function(ag){return ag.id===aid;});var col=a?a.color:"#64748B";
           var dp=DESK_POS[aid];var isMaya=aid==="maya";var dw=isMaya?80:68;
           var cx=dp.x+dw/2;var by=dp.y-(isMaya?12:8);
-          var bw=114;var bh=26;var bx=cx-bw/2;var btop=by-bh;
+          var bw=120;var bh=30;var bx=cx-bw/2;var btop=by-bh;
           return <g key={"bub-"+aid}>
             <rect x={bx+1} y={btop+2} width={bw} height={bh} rx="10" fill="rgba(0,0,0,0.06)"/>
             <rect x={bx} y={btop} width={bw} height={bh} rx="10" fill="white" stroke={col} strokeWidth="1.2"/>
             <rect x={bx+3} y={btop+5} width="4" height={bh-10} rx="2" fill={col}/>
             <path d={"M"+(cx-5)+","+by+" L"+cx+","+(by+7)+" L"+(cx+5)+","+by+" Z"} fill="white" stroke={col} strokeWidth="0.8" strokeLinejoin="round"/>
             <rect x={cx-6} y={by-1.5} width="12" height="3" fill="white"/>
-            <text x={cx+3} y={btop+bh/2+4} textAnchor="middle" fill="#1E293B" fontSize="7.5" fontWeight="600" fontFamily="monospace">{sp}</text>
+            <text x={cx+3} y={btop+bh/2+4} textAnchor="middle" fill="#1E293B" fontSize="7.5" fontWeight="600" fontFamily="'Inter',system-ui,sans-serif">{sp}</text>
           </g>;
         })}
       </svg>
@@ -380,13 +380,28 @@ var FE={
    AGENTS + COMPUTE MAP (preserved, +clinic detail routing)
    ═══════════════════════════════════════════════════════════════════ */
 var AGENTS=[
-  {id:"maya",name:"Maya",title:"FP&A Director",color:"#4F46E5",data_access:[],skills:["route_query","decompose_task","synthesize_responses","executive_brief"],canCallOn:["raj","priya","alex","sam","jordan"],focus:"Orchestrates the team. Routes queries to specialists. Cannot access raw data directly.",sysBase:"You are Maya, FP&A Director at TVG-Medulla (30 chiropractic clinics, 6 regions, PE-backed by Vistria $16B AUM). You ORCHESTRATE the analyst team. Below is ROUTING METADATA showing which specialists were engaged and their pre-computed outputs. You do NOT recalculate. Synthesize into a concise executive brief using markdown. When decomposing complex queries, explain which specialists you routed to and why."},
-  {id:"raj",name:"Raj",title:"Variance Analyst",color:"#DC2626",data_access:["Variance_Data","Regional_PnL"],skills:["variance_bridge","volume_decomposition","rate_analysis","expense_variance","regional_ebitda"],canCallOn:["priya","jordan"],focus:"Every dollar missed, decomposed deterministically. Access: Variance_Data + Regional_PnL.",sysBase:"You are Raj, Variance Analyst at TVG-Medulla. SKILL FILE: data_access=[Variance_Data, Regional_PnL], skills=[variance_bridge, volume_decomposition, rate_analysis, expense_variance, regional_ebitda]. Below is MATHEMATICALLY VERIFIED variance data including REGIONAL P&L (per-region revenue, expenses by category, EBITDA, and margin). You can answer region-specific EBITDA, margin, and expense variance questions. DO NOT access denial or forecast data. Format into clear executive variance commentary with markdown tables."},
-  {id:"priya",name:"Priya",title:"Revenue Cycle",color:"#D97706",data_access:["AR_Aging","Denial_Logs"],skills:["denial_analysis","cpt_code_audit","recovery_modeling","collection_optimization"],canCallOn:["raj","jordan"],focus:"Denial expert. Every code quantified in dollars. Access: AR_Aging, Denial_Logs only.",sysBase:"You are Priya, Revenue Cycle Specialist at TVG-Medulla. SKILL FILE: data_access=[AR_Aging, Denial_Logs], skills=[denial_analysis, cpt_code_audit, recovery_modeling, collection_optimization]. Below is MATHEMATICALLY VERIFIED denial/AR data from your authorized access. DO NOT access variance bridge or forecast data. Format into an executive denial report with CPT codes and recovery opportunity. CRITICAL RULE: When queried about AR Aging or DSO, you MUST extract and output the exact quantitative metrics for the specified clinics. You must list the specific Days_Sales_Outstanding_DSO average, the Pct_Over_90 days percentage, and the Total_AR dollar amount. Never use generic qualitative phrases like extended DSO."},
-  {id:"alex",name:"Alex",title:"Forecasting",color:"#059669",data_access:["Forecast_Models"],skills:["scenario_modeling","driver_based_forecast","sensitivity_analysis","trend_projection"],canCallOn:["raj","jordan"],focus:"Driver-based forecasts. Three scenarios. Access: Forecast_Models only.",sysBase:"You are Alex, Forecasting Analyst at TVG-Medulla. SKILL FILE: data_access=[Forecast_Models], skills=[scenario_modeling, driver_based_forecast, sensitivity_analysis]. Below is MATHEMATICALLY VERIFIED forecast data. DO NOT access raw clinic data or denial logs. Format into a clear forecast summary with tables."},
-  {id:"sam",name:"Sam",title:"Board Reporter",color:"#7C3AED",data_access:["PE_Metrics","SSS","CAC","Regional_Metrics"],skills:["pe_commentary","board_package","investor_narrative","kpi_formatting"],canCallOn:["maya","raj"],focus:"PE-grade commentary for Vistria. Access: PE_Metrics, SSS, CAC, Regional_Metrics.",sysBase:"You are Sam, Board Reporter at TVG-Medulla. SKILL FILE: data_access=[PE_Metrics, SSS, CAC, Regional_Metrics], skills=[pe_commentary, board_package, investor_narrative]. Below is MATHEMATICALLY VERIFIED PE metrics including PRE-COMPUTED regional_metrics. DO NOT access raw denial logs or clinic-level data. Write 3 paragraphs of PE-style commentary. Lead with the number, explain the driver, state the corrective action. CRITICAL RULE: NEVER calculate CAC, Utilization_Pct, or Tech_to_Doc_Ratio by dividing expense or revenue data. ONLY read and report the exact pre-computed values from the regional_metrics JSON object. These are mathematically verified averages computed directly from source spreadsheet data."},
-  {id:"jordan",name:"Jordan",title:"Ops Intel",color:"#0891B2",data_access:["Clinic_Health","Ops_Metrics","Regional_Metrics"],skills:["clinic_health_scoring","regional_ranking","risk_flagging","comp_analysis"],canCallOn:["raj","priya"],focus:"Clinic vital signs. Health scores from real metrics. Access: Clinic_Health, Ops_Metrics, Regional_Metrics.",sysBase:"You are Jordan, Ops Intelligence at TVG-Medulla. SKILL FILE: data_access=[Clinic_Health, Ops_Metrics, Regional_Metrics], skills=[clinic_health_scoring, regional_ranking, risk_flagging, comp_analysis]. Below is MATHEMATICALLY VERIFIED clinic health data including PRE-COMPUTED regional_metrics. DO NOT access forecast models or PE metrics. Format into a report with rankings, risk flags, and recommendations. CRITICAL RULE: NEVER calculate Utilization_Pct, Tech_to_Doc_Ratio, Comp_Ratio, or Blended_CAC by dividing expense or revenue data. ONLY read and report the exact pre-computed values from the regional_metrics JSON object. These are mathematically verified averages computed directly from source spreadsheet data."},
+  {id:"maya",name:"Maya",title:"FP&A Director",color:"#4F46E5",data_access:[],skills:["route_query","decompose_task","synthesize_responses","executive_brief"],canCallOn:["raj","priya","alex","sam","jordan"],focus:"Orchestrates the team. Routes queries to specialists. Cannot access raw data directly.",sysBase:"You are Maya, FP&A Director at TVG-Medulla (30 chiropractic clinics, 6 regions, PE-backed by Vistria $16B AUM). You ORCHESTRATE the analyst team with PhD-level financial expertise. You know every data point in this dataset. Below is ROUTING METADATA showing which specialists were engaged and their pre-computed outputs. You do NOT recalculate. Synthesize into a concise executive brief using markdown. When decomposing complex queries, explain which specialists you routed to and why. CRITICAL DATA INTEGRITY: If any specialist output contains data_context.noDataReason, you MUST prominently state that the requested region has no data in the loaded dataset. List the available regions (from data_context.availableRegions) and present analysis across all available regions instead. NEVER present empty frameworks, hypothetical data, or target ranges you invented. Every single number must come from specialist outputs."},
+  {id:"raj",name:"Raj",title:"Variance Analyst",color:"#DC2626",data_access:["Variance_Data","Regional_PnL"],skills:["variance_bridge","volume_decomposition","rate_analysis","expense_variance","regional_ebitda"],canCallOn:["priya","jordan"],focus:"Every dollar missed, decomposed deterministically. Access: Variance_Data + Regional_PnL.",sysBase:"You are Raj, Variance Analyst at TVG-Medulla with PhD-level financial expertise. You know every data point in this dataset inside-out. SKILL FILE: data_access=[Variance_Data, Regional_PnL], skills=[variance_bridge, volume_decomposition, rate_analysis, expense_variance, regional_ebitda]. Below is MATHEMATICALLY VERIFIED variance data including REGIONAL P&L (per-region revenue, expenses by category, EBITDA, and margin). You can answer region-specific EBITDA, margin, and expense variance questions. DO NOT access denial or forecast data. Format into clear executive variance commentary with markdown tables. CRITICAL DATA INTEGRITY: FIRST check data_context in the VERIFIED DATA. If data_context.noDataReason is present, you MUST begin your response by clearly stating: the requested region has NO DATA in the uploaded Excel. Explain the reason from data_context.noDataReason. Then list all available regions from data_context.availableRegions with their clinic counts. Present a full variance analysis across ALL available regions instead. NEVER output empty tables, zero-row results, hypothetical frameworks, or invented target ranges. Every dollar figure must come from the VERIFIED DATA below."},
+  {id:"priya",name:"Priya",title:"Revenue Cycle",color:"#D97706",data_access:["AR_Aging","Denial_Logs"],skills:["denial_analysis","cpt_code_audit","recovery_modeling","collection_optimization"],canCallOn:["raj","jordan"],focus:"Denial expert. Every code quantified in dollars. Access: AR_Aging, Denial_Logs only.",sysBase:"You are Priya, Revenue Cycle Specialist at TVG-Medulla with PhD-level revenue cycle expertise. You know every denial code, CPT, and AR aging bucket in this dataset. SKILL FILE: data_access=[AR_Aging, Denial_Logs], skills=[denial_analysis, cpt_code_audit, recovery_modeling, collection_optimization]. Below is MATHEMATICALLY VERIFIED denial/AR data from your authorized access. DO NOT access variance bridge or forecast data. Format into an executive denial report with CPT codes and recovery opportunity. CRITICAL RULE: When queried about AR Aging or DSO, you MUST extract and output the exact quantitative metrics for the specified clinics. You must list the specific Days_Sales_Outstanding_DSO average, the Pct_Over_90 days percentage, and the Total_AR dollar amount. Never use generic qualitative phrases like extended DSO. DATA INTEGRITY: Check data_context. If data_context.noDataReason is present, state clearly that the requested region has no data. List available regions and present analysis across all loaded regions instead. NEVER present empty results or hypothetical frameworks."},
+  {id:"alex",name:"Alex",title:"Forecasting",color:"#059669",data_access:["Forecast_Models"],skills:["scenario_modeling","driver_based_forecast","sensitivity_analysis","trend_projection"],canCallOn:["raj","jordan"],focus:"Driver-based forecasts. Three scenarios. Access: Forecast_Models only.",sysBase:"You are Alex, Forecasting Analyst at TVG-Medulla with PhD-level forecasting expertise. You know every trend and budget assumption in this dataset. SKILL FILE: data_access=[Forecast_Models], skills=[scenario_modeling, driver_based_forecast, sensitivity_analysis]. Below is MATHEMATICALLY VERIFIED forecast data. DO NOT access raw clinic data or denial logs. Format into a clear forecast summary with tables. DATA INTEGRITY: Check data_context for available regions and total clinics. NEVER present hypothetical projections without data backing. Every number must come from the VERIFIED DATA below."},
+  {id:"sam",name:"Sam",title:"Board Reporter",color:"#7C3AED",data_access:["PE_Metrics","SSS","CAC","Regional_Metrics"],skills:["pe_commentary","board_package","investor_narrative","kpi_formatting"],canCallOn:["maya","raj"],focus:"PE-grade commentary for Vistria. Access: PE_Metrics, SSS, CAC, Regional_Metrics.",sysBase:"You are Sam, Board Reporter at TVG-Medulla with PhD-level PE/investor relations expertise. You know every KPI in this dataset inside-out. SKILL FILE: data_access=[PE_Metrics, SSS, CAC, Regional_Metrics], skills=[pe_commentary, board_package, investor_narrative]. Below is MATHEMATICALLY VERIFIED PE metrics including PRE-COMPUTED regional_metrics. DO NOT access raw denial logs or clinic-level data. Write 3 paragraphs of PE-style commentary. Lead with the number, explain the driver, state the corrective action. CRITICAL RULE: NEVER calculate CAC, Utilization_Pct, or Tech_to_Doc_Ratio by dividing expense or revenue data. ONLY read and report the exact pre-computed values from the regional_metrics JSON object. These are mathematically verified averages computed directly from source spreadsheet data. DATA INTEGRITY: Check data_context for available regions. If a requested region has no data, state this clearly and present all-region analysis instead. NEVER fabricate numbers or present empty frameworks."},
+  {id:"jordan",name:"Jordan",title:"Ops Intel",color:"#0891B2",data_access:["Clinic_Health","Ops_Metrics","Regional_Metrics"],skills:["clinic_health_scoring","regional_ranking","risk_flagging","comp_analysis"],canCallOn:["raj","priya"],focus:"Clinic vital signs. Health scores from real metrics. Access: Clinic_Health, Ops_Metrics, Regional_Metrics.",sysBase:"You are Jordan, Ops Intelligence at TVG-Medulla with PhD-level operations expertise. You know every clinic metric, provider ratio, and health score in this dataset. SKILL FILE: data_access=[Clinic_Health, Ops_Metrics, Regional_Metrics], skills=[clinic_health_scoring, regional_ranking, risk_flagging, comp_analysis]. Below is MATHEMATICALLY VERIFIED clinic health data including PRE-COMPUTED regional_metrics. DO NOT access forecast models or PE metrics. Format into a report with rankings, risk flags, and recommendations. CRITICAL RULE: NEVER calculate Utilization_Pct, Tech_to_Doc_Ratio, Comp_Ratio, or Blended_CAC by dividing expense or revenue data. ONLY read and report the exact pre-computed values from the regional_metrics JSON object. These are mathematically verified averages computed directly from source spreadsheet data. DATA INTEGRITY: Check data_context. If data_context.noDataReason is present, state clearly that the requested region has no data in the loaded dataset. List available regions from data_context.availableRegions and present full analysis across all loaded regions instead. NEVER output empty results or hypothetical frameworks."},
 ];
+/* ── REGION RESOLVER — robust matching with aliases + data availability context ── */
+var REGION_ALIASES={"missouri":"MOKS","kansas":"MOKS","mo-ks":"MOKS","mo ks":"MOKS","moks":"MOKS","illinois":"IL","il ":"IL","indiana":"IN","in ":"IN","kentucky":"KY","ky ":"KY","pacific":"PNW","pnw":"PNW","northwest":"PNW","arizona":"AZ","az ":"AZ"};
+function resolveRegion(query){
+  var lc=query.toLowerCase();var rid=null;var reqName=null;
+  /* 1. Direct match against loaded region full names and IDs */
+  DB.regions.forEach(function(r){if(lc.includes(r.name.toLowerCase())||lc.includes(r.id.toLowerCase())){rid=r.id;reqName=r.name;}});
+  /* 2. Split-word match (first word of region name, e.g. "pacific" from "Pacific NW") */
+  if(!rid){DB.regions.forEach(function(r){var fw=r.name.toLowerCase().split(" ")[0];if(fw.length>2&&lc.includes(fw)){rid=r.id;reqName=r.name;}});}
+  /* 3. Alias match (e.g. "missouri" → MOKS, "kansas" → MOKS) */
+  if(!rid){Object.keys(REGION_ALIASES).forEach(function(alias){if(lc.includes(alias)){rid=REGION_ALIASES[alias];var m=REGION_META[rid];reqName=m?m.name:alias;}});}
+  /* 4. Verify matched region has actual loaded clinic data */
+  var hasData=rid?DB.regions.some(function(r){return r.id===rid;}):false;
+  var available=DB.regions.map(function(r){return{id:r.id,name:r.name,clinics:r.clinics,revActual:"$"+r.revenue.actual+"K",revBudget:"$"+r.revenue.budget+"K"};});
+  return{regionId:hasData?rid:null,matchedCode:rid,requestedName:reqName,hasData:hasData,noDataReason:rid&&!hasData?"Region '"+reqName+"' (code: "+rid+") is defined in the system but has ZERO clinics in the currently uploaded Excel data. This region exists in the platform configuration but no data rows were found for it in the uploaded dataset.":null,availableRegions:available,totalClinics:CLINICS.length};
+}
 /* AGENT_COMPUTE — Enforces data_access boundaries per agent skill file */
 var AGENT_COMPUTE={
   maya:function(q,routePlan){
@@ -407,20 +422,19 @@ var AGENT_COMPUTE={
     return{routing_plan:plan,specialist_outputs:routed,meta:{company:"TVG-Medulla",period:"January 2026",clinics:DB.clinicCount,orchestrator:"Maya",routingMethod:"dynamic_intent"}};
   },
   raj:function(q){/* Boundary: Variance_Data + Regional_PnL — no denial, no forecast */
-    var lc=q.toLowerCase();
-    var rid=null;DB.regions.forEach(function(r){if(lc.includes(r.name.toLowerCase().split(" ")[0])||lc.includes(r.id.toLowerCase()))rid=r.id;});
+    var lc=q.toLowerCase();var reg=resolveRegion(q);var rid=reg.regionId;
     /* Detect intent: expense, EBITDA/margin, or revenue variance */
     var wantsExpense=lc.includes("expense")||lc.includes("cost")||lc.includes("spend");
     var wantsEbitda=lc.includes("ebitda")||lc.includes("margin")||lc.includes("p&l")||lc.includes("pnl")||lc.includes("profit");
-    if(lc.includes("clinic:")){var cid=q.match(/clinic:(\w+)/);if(cid){var d=FE.clinicDetail(cid[1]);return d?{id:d.id,name:d.name,revenueBudget:d.revenueBudget,revenueActual:d.revenueActual,variance:d.variance,variancePct:d.variancePct,visits:d.visits}:null;}}
-    /* Build comprehensive response */
-    var result={varianceBridge:FE.varianceBridge(rid)};
-    if(wantsExpense||wantsEbitda||rid){result.expenseVariance=FE.expenseVariance(rid);result.regionalPnL=FE.regionalPnL(rid);}
-    if(!wantsExpense&&!wantsEbitda&&!rid){result.expenseVariance=FE.expenseVariance();result.regionalPnL=FE.regionalPnL();}
+    if(lc.includes("clinic:")){var cid=q.match(/clinic:(\w+)/);if(cid){var d=FE.clinicDetail(cid[1]);return d?{id:d.id,name:d.name,revenueBudget:d.revenueBudget,revenueActual:d.revenueActual,variance:d.variance,variancePct:d.variancePct,visits:d.visits,data_context:reg}:null;}}
+    /* ALWAYS build comprehensive data — agent decides what to present */
+    var result={varianceBridge:FE.varianceBridge(rid),expenseVariance:FE.expenseVariance(rid),regionalPnL:FE.regionalPnL(rid),data_context:reg};
+    /* If region filter returned empty OR no region matched, include ALL data */
+    if(!rid||result.regionalPnL.length===0){result.regionalPnL=FE.regionalPnL();result.expenseVariance=FE.expenseVariance();result.varianceBridge=FE.varianceBridge();}
     return result;
   },
   priya:function(q){/* Boundary: AR_Aging + Denial_Logs + Payer_Mix only — no variance bridge */
-    var lc=q.toLowerCase();var rid=null;DB.regions.forEach(function(r){if(lc.includes(r.name.toLowerCase().split(" ")[0]))rid=r.id;});
+    var lc=q.toLowerCase();var reg=resolveRegion(q);var rid=reg.regionId;
     var base=FE.denialAnalysis(rid);
     /* Enrich with actual Denial Log data */
     var filteredDenials=rid?DB.denialLog.filter(function(d){return d.region&&d.region.toLowerCase().includes(rid.toLowerCase());}):DB.denialLog;
@@ -434,6 +448,7 @@ var AGENT_COMPUTE={
     base.arAgingDetail={clinics:arDetail,summary:{avgDSO:arTotals.count?Math.round(arTotals.dsoSum/arTotals.count):0,avgPctOver90:arTotals.count?Math.round(arTotals.totalOver90/arTotals.count*10)/10:0,totalAR:arTotals.totalAR,clinicCount:arTotals.count}};
     /* Payer Mix data */
     if(Object.keys(DB.payerMix).length>0){var payerAgg={};var pmClinics=rid?Object.keys(DB.payerMix).filter(function(cid){var cl=CLINICS.find(function(c){return c.id===cid;});return cl&&cl.region===rid;}):Object.keys(DB.payerMix);pmClinics.forEach(function(cid){(DB.payerMix[cid]||[]).forEach(function(pm){if(!payerAgg[pm.payer])payerAgg[pm.payer]={payer:pm.payer,grossCharges:0,adjustments:0,netRevenue:0,claims:0,denials:0};payerAgg[pm.payer].grossCharges+=pm.grossCharges;payerAgg[pm.payer].adjustments+=pm.adjustments;payerAgg[pm.payer].netRevenue+=pm.netRevenue;payerAgg[pm.payer].claims+=pm.claims;payerAgg[pm.payer].denials+=pm.denials;});});base.payerMixSummary=Object.values(payerAgg).map(function(p){return{payer:p.payer,grossCharges:Math.round(p.grossCharges/1000),netRevenue:Math.round(p.netRevenue/1000),claims:p.claims,denials:p.denials,denialRate:p.claims?Math.round(p.denials/p.claims*1000)/10:0};}).sort(function(a,b){return b.grossCharges-a.grossCharges;});}
+    base.data_context=reg;
     return base;
   },
   alex:function(q){/* Boundary: Forecast_Models + Monthly_Trend + Budget_Assumptions only */
@@ -442,6 +457,7 @@ var AGENT_COMPUTE={
     if(Object.keys(DB.monthlyTrend).length>0){var periodAgg={};Object.values(DB.monthlyTrend).forEach(function(clinicTrends){clinicTrends.forEach(function(t){if(!periodAgg[t.period])periodAgg[t.period]={period:t.period,visits:0,revenue:0,avgDenial:0,clinicCount:0};periodAgg[t.period].visits+=t.visits;periodAgg[t.period].revenue+=t.netRevenue;periodAgg[t.period].avgDenial+=t.denialRate;periodAgg[t.period].clinicCount++;});});base.historicalTrend=Object.values(periodAgg).map(function(p){return{period:p.period,visits:p.visits,revenue:Math.round(p.revenue/1000),avgDenialRate:Math.round(p.avgDenial/p.clinicCount*10)/10};}).sort(function(a,b){return a.period<b.period?-1:1;});}
     /* Enrich with budget assumptions */
     if(Object.keys(DB.budgetAssumptions).length>0){var baSum={totalAnnualBudget:0,avgRPV:0,avgDenialTarget:0,avgEbitdaTarget:0,count:0};Object.values(DB.budgetAssumptions).forEach(function(ba){baSum.totalAnnualBudget+=ba.annualRevBudget;baSum.avgRPV+=ba.rpvAssumption;baSum.avgDenialTarget+=ba.denialTarget;baSum.avgEbitdaTarget+=ba.ebitdaMarginTarget;baSum.count++;});base.budgetContext={totalAnnualBudget:Math.round(baSum.totalAnnualBudget/1000),avgRPV:Math.round(baSum.avgRPV/baSum.count),avgDenialTarget:Math.round(baSum.avgDenialTarget/baSum.count*10)/10,avgEbitdaTarget:Math.round(baSum.avgEbitdaTarget/baSum.count*10)/10};}
+    base.data_context={availableRegions:DB.regions.map(function(r){return{id:r.id,name:r.name,clinics:r.clinics};}),totalClinics:CLINICS.length};
     return base;
   },
   sam:function(q){/* Boundary: PE_Metrics, SSS, CAC only — receives executive summary (aggregated, not raw) */
@@ -456,11 +472,12 @@ var AGENT_COMPUTE={
     base.sssBreakdown={core:sssData.core,acquired:sssData.acquired,coreRegions:regionSSS};
     /* ── PRE-COMPUTED REGIONAL METRICS (deterministic, no LLM math) ── */
     base.regional_metrics=JSON.parse(JSON.stringify(DB.regionalMetrics));
+    base.data_context={availableRegions:DB.regions.map(function(r){return{id:r.id,name:r.name,clinics:r.clinics};}),totalClinics:CLINICS.length};
     return base;
   },
   jordan:function(q){/* Boundary: Clinic_Health, Ops_Metrics + Provider_Productivity + Regional_Metrics only */var lc=q.toLowerCase();
     var wantsComp=lc.includes("comp")||lc.includes("doctor")||lc.includes("provider")||lc.includes("tech-to");
-    var rid=null;DB.regions.forEach(function(r){if(lc.includes(r.name.toLowerCase().split(" ")[0])||lc.includes(r.id.toLowerCase()))rid=r.id;});
+    var reg=resolveRegion(q);var rid=reg.regionId;
     var base=wantsComp?FE.doctorCompImpact():FE.clinicHealth();
     /* ── PRE-COMPUTED REGIONAL METRICS (deterministic, no LLM math) ── */
     base.regional_metrics=rid?{[rid]:DB.regionalMetrics[rid]}:JSON.parse(JSON.stringify(DB.regionalMetrics));
@@ -472,6 +489,7 @@ var AGENT_COMPUTE={
       base.providerSummary={totalProviders:allProv.totalProviders,avgUtilization:Math.round(allProv.avgUtil/allProv.totalProviders*10)/10,avgCompRatio:Math.round(allProv.avgCompRatio/allProv.totalProviders*10)/10,totalRevenue:Math.round(allProv.totalRevenue/1000),totalComp:Math.round(allProv.totalComp/1000)};
       base.providerByRegion=regionProvSummary;
     }
+    base.data_context=reg;
     return base;
   }
 };
@@ -735,7 +753,7 @@ export default function App(){
       agents.push("jordan");tasks.push({agent:"Jordan",task:"Ops / provider analysis",data:"Clinic_Health, Ops_Metrics"});
     }
     /* ── Region name triggers — add relevant agents for cross-cutting queries ── */
-    var hasRegion=false;DB.regions.forEach(function(r){if(lc.includes(r.name.toLowerCase().split(" ")[0])||lc.includes(r.id.toLowerCase()))hasRegion=true;});
+    var regCheck=resolveRegion(query);var hasRegion=regCheck.matchedCode!==null;
     if(hasRegion&&agents.indexOf("raj")<0){agents.push("raj");tasks.push({agent:"Raj",task:"Regional variance",data:"Variance_Data, Regional_PnL"});}
     /* ── Fallback if nothing matched ── */
     if(agents.length===0){agents=["raj","jordan","sam"];tasks=[{agent:"Raj",task:"Variance overview"},{agent:"Jordan",task:"Health scoring"},{agent:"Sam",task:"Executive summary"}];}
