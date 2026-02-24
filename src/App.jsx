@@ -47,10 +47,20 @@ function LiveOffice({scene,handoffs,ebitdaVar,agents,decomp}){
   var isActive=scene.type!=="idle";
   /* Scene changes trigger data packet + spawn — only during real work */
   useEffect(function(){if(scene.type==="chat"||scene.type==="handoff"||scene.type==="working"){setPacket({from:scene.from,to:scene.to,key:Date.now()});if(scene.to){setSpawnId(scene.to);setTimeout(function(){setSpawnId(null);},800);}var tm=setTimeout(function(){setPacket(null);},1800);return function(){clearTimeout(tm);};}},[scene]);
-  /* Agent animation — ONLY fires during actual API work */
-  function isOn(id){return isActive&&(scene.from===id||scene.to===id);}
-  function isTyping(id){return isActive&&(scene.from===id||(scene.to===id&&tick>2));}
-  function getSpeech(id){if(!isActive||scene.from!==id)return null;var lines=AGENT_LINES[id]||["Working..."];return lines[Math.floor(tick/5)%lines.length];}
+  /* Agent animation — DYNAMICALLY driven by scene.activeAgents array */
+  var dynAgents=scene.activeAgents||[];
+  function isOn(id){
+    if(!isActive)return false;
+    /* If activeAgents array exists, use it — otherwise fall back to from/to */
+    if(dynAgents.length>0)return dynAgents.indexOf(id)>=0||scene.from===id;
+    return scene.from===id||scene.to===id;
+  }
+  function isTyping(id){
+    if(!isActive)return false;
+    if(dynAgents.length>0)return(dynAgents.indexOf(id)>=0&&tick>2)||scene.from===id;
+    return scene.from===id||(scene.to===id&&tick>2);
+  }
+  function getSpeech(id){if(!isActive)return null;if(dynAgents.length>0&&dynAgents.indexOf(id)<0&&scene.from!==id)return null;if(scene.from!==id&&scene.to!==id&&dynAgents.indexOf(id)<0)return null;var lines=AGENT_LINES[id]||["Working..."];return lines[Math.floor(tick/5)%lines.length];}
 
   function DeskG({id,x,y,on,isFrom}){
     var a=(agents||AGENTS_REF).find(function(ag){return ag.id===id;});
@@ -183,7 +193,7 @@ var GEO_LOOKUP={"IL01":{lat:41.833,lng:-87.929},"IL02":{lat:41.786,lng:-88.147},
 var REGION_CODE_MAP={"Illinois":"IL","Indiana":"IN","Kentucky":"KY","Pacific NW":"PNW","Arizona":"AZ","MO-KS":"MOKS"};
 
 function parseDataRoom(workbook){
-  var result={clinics:[],arAging:{},providerData:{},expenses:[],denialLog:[],payerMix:{},monthlyTrend:{},budgetAssumptions:{},dataRoomIndex:[],meta:{company:"TVG-Medulla",period:"January 2026",pe:"Vistria Group",peAUM:"$16B",denialTarget:8.0},extraction:[]};
+  var result={clinics:[],arAging:{},providerData:{},expenses:[],regionalExpenses:{},denialLog:[],payerMix:{},monthlyTrend:{},budgetAssumptions:{},dataRoomIndex:[],meta:{company:"TVG-Medulla",period:"January 2026",pe:"Vistria Group",peAUM:"$16B",denialTarget:8.0},extraction:[]};
   /* ── 1. Data Room Index ── */
   var idxSheet=workbook.Sheets["Data Room Index"];
   if(idxSheet){var idxRows=XLSX.utils.sheet_to_json(idxSheet,{header:1});result.dataRoomIndex=idxRows;result.extraction.push({sheet:"Data Room Index",rows:idxRows.length,cols:1,status:"meta"});}
@@ -199,14 +209,28 @@ function parseDataRoom(workbook){
       prepaidCash:parseInt(row["Prepaid_Cash_Collected"])||0,deferredRev:parseInt(row["Deferred_Revenue_Balance"])||0,
       newPatients:parseInt(row["New_Patients"])||0,blendedCAC:parseInt(row["Blended_CAC"])||0});
   });result.extraction.push({sheet:"Clinic Export",rows:result.clinics.length,cols:15,status:"ok"});}
-  /* ── 3. Expense Detail — aggregate by code into $K ── */
+  /* ── 3. Expense Detail — aggregate company-wide + by region ── */
   var expSheet=workbook.Sheets["Expense Detail"];
   var expRawCount=0;
   if(expSheet){var expAgg={};var catMap={DRCOMP:"labor",CTECH:"labor",STAFF:"labor",BEN:"labor",RENT:"occupancy",MKT:"growth",SUPPLY:"ops",TECH:"ops"};
     var expRows=XLSX.utils.sheet_to_json(expSheet);expRawCount=expRows.length;
+    /* Company-wide aggregation */
     expRows.forEach(function(row){var code=row["Expense_Code"];if(!expAgg[code])expAgg[code]={id:code,name:row["Expense_Category"],budget:0,actual:0};expAgg[code].budget+=(parseInt(row["Budget_Amount"])||0);expAgg[code].actual+=(parseInt(row["Actual_Amount"])||0);});
     Object.keys(expAgg).forEach(function(k){var e=expAgg[k];result.expenses.push({id:k,name:e.name,budget:Math.round(e.budget/1000),actual:Math.round(e.actual/1000),category:catMap[k]||"ops"});});
-    result.extraction.push({sheet:"Expense Detail",rows:expRawCount,cols:7,status:"ok",note:"→ "+result.expenses.length+" categories"});
+    /* Regional expense aggregation — group by Region + Expense_Code */
+    var regExpAgg={};
+    expRows.forEach(function(row){
+      var regionStr=row["Region"]||"";var regionCode=REGION_CODE_MAP[regionStr]||regionStr.replace(/[^A-Z]/g,"").slice(0,4);
+      var code=row["Expense_Code"];var key=regionCode+"|"+code;
+      if(!regExpAgg[key])regExpAgg[key]={region:regionCode,id:code,name:row["Expense_Category"],budget:0,actual:0,category:catMap[code]||"ops"};
+      regExpAgg[key].budget+=(parseInt(row["Budget_Amount"])||0);regExpAgg[key].actual+=(parseInt(row["Actual_Amount"])||0);
+    });
+    result.regionalExpenses={};
+    Object.values(regExpAgg).forEach(function(re){
+      if(!result.regionalExpenses[re.region])result.regionalExpenses[re.region]=[];
+      result.regionalExpenses[re.region].push({id:re.id,name:re.name,budget:Math.round(re.budget/1000),actual:Math.round(re.actual/1000),category:re.category});
+    });
+    result.extraction.push({sheet:"Expense Detail",rows:expRawCount,cols:7,status:"ok",note:"→ "+result.expenses.length+" categories × "+Object.keys(result.regionalExpenses).length+" regions"});
   }
   if(result.expenses.length===0){result.expenses=[{id:"DRCOMP",name:"Doctor Comp",budget:1450,actual:1420,category:"labor"},{id:"CTECH",name:"Clinical Tech",budget:400,actual:385,category:"labor"},{id:"STAFF",name:"Front Desk",budget:400,actual:390,category:"labor"},{id:"RENT",name:"Rent",budget:620,actual:625,category:"occupancy"},{id:"SUPPLY",name:"Supplies",budget:185,actual:192,category:"ops"},{id:"MKT",name:"Marketing",budget:165,actual:178,category:"growth"},{id:"BEN",name:"Benefits",budget:310,actual:305,category:"labor"},{id:"TECH",name:"Technology",budget:95,actual:92,category:"ops"}];}
   /* ── 4. Denial Log ── */
@@ -260,7 +284,7 @@ function parseDataRoom(workbook){
 var REGION_META={IL:{name:"Illinois",tag:"Core",denialTarget:8.0,topDenialCodes:[{code:"CO-16",pct:35,reason:"Medical necessity"},{code:"CO-4",pct:25,reason:"Modifier issue"}]},IN:{name:"Indiana",tag:"",denialTarget:8.0,topDenialCodes:[{code:"CO-16",pct:30,reason:"Medical necessity"}]},KY:{name:"Kentucky",tag:"Acquired",denialTarget:8.0,topDenialCodes:[{code:"CO-4",pct:42,reason:"Missing AT modifier"},{code:"CO-16",pct:30,reason:"Medical necessity / CPT mismatch"},{code:"PR-1",pct:12,reason:"Deductible"}]},PNW:{name:"Pacific NW",tag:"",denialTarget:8.0,topDenialCodes:[]},AZ:{name:"Arizona",tag:"",denialTarget:8.0,topDenialCodes:[{code:"CO-16",pct:40,reason:"Medical necessity"},{code:"CO-4",pct:20,reason:"Modifier"}]},MOKS:{name:"MO-KS",tag:"",denialTarget:8.0,topDenialCodes:[]}};
 
 var CLINICS=[];
-var DB={meta:{company:"TVG-Medulla",period:"January 2026",pe:"Vistria Group",peAUM:"$16B",denialTarget:8.0},get clinics(){return CLINICS;},expenses:[],arAging:{},providerData:{},denialLog:[],payerMix:{},monthlyTrend:{},budgetAssumptions:{},extraction:[],
+var DB={meta:{company:"TVG-Medulla",period:"January 2026",pe:"Vistria Group",peAUM:"$16B",denialTarget:8.0},get clinics(){return CLINICS;},expenses:[],regionalExpenses:{},arAging:{},providerData:{},denialLog:[],payerMix:{},monthlyTrend:{},budgetAssumptions:{},extraction:[],
   denialCPT:{"98940":{desc:"CMT 1-2 spinal regions",avgCharge:52},"98941":{desc:"CMT 3-4 spinal regions",avgCharge:76},"98942":{desc:"CMT 5 spinal regions",avgCharge:92},"97140":{desc:"Manual therapy",avgCharge:45}},
   get regions(){var rMap={};CLINICS.forEach(function(cl){if(!rMap[cl.region])rMap[cl.region]={id:cl.region,clinics:0,budRev:0,actRev:0,budVisits:0,actVisits:0,denialSum:0};var r=rMap[cl.region];r.clinics++;r.budRev+=cl.revBud;r.actRev+=cl.revAct;r.budVisits+=(cl.visitsBud||cl.visits);r.actVisits+=cl.visits;r.denialSum+=cl.denial;});
     return Object.keys(rMap).map(function(rid){var r=rMap[rid];var m=REGION_META[rid]||{name:rid,tag:"",denialTarget:8,topDenialCodes:[]};var avgDenial=r.denialSum/r.clinics;var avgRpvBud=r.budRev/r.clinics;var avgRpvAct=r.actRev/r.clinics;
@@ -271,19 +295,34 @@ var FE={
   revenueSummary:function(){var budR=0,actR=0,budE=0,actE=0,denN=0,clinN=0;DB.regions.forEach(function(r){budR+=r.revenue.budget;actR+=r.revenue.actual;denN+=r.denial.current*r.clinics;clinN+=r.clinics;});DB.expenses.forEach(function(e){budE+=e.budget;actE+=e.actual;});var ebBud=budR-budE,ebAct=actR-actE;return{revenue:{budget:budR,actual:actR,variance:actR-budR,variancePct:budR?((actR-budR)/budR*100):0},expenses:{budget:budE,actual:actE,variance:actE-budE},ebitda:{budget:ebBud,actual:ebAct,variance:ebAct-ebBud,marginBud:budR?(ebBud/budR*100):0,marginAct:actR?(ebAct/actR*100):0},denial:{weighted:clinN?Math.round(denN/clinN*10)/10:0,target:DB.meta.denialTarget||8},clinics:clinN,period:DB.meta.period};},
   varianceBridge:function(regionId){var regions=regionId?DB.regions.filter(function(r){return r.id===regionId;}):DB.regions;var rows=regions.map(function(r){var volImpact=(r.visits.actual-r.visits.budget)*r.rpv.budget/1000;var rateImpact=(r.rpv.actual-r.rpv.budget)*r.visits.actual/1000;var denialExcess=Math.max(0,r.denial.current-r.denial.target);var denialImpact=-(r.revenue.actual*denialExcess/100);var totalVar=r.revenue.actual-r.revenue.budget;var residual=totalVar-volImpact-rateImpact-denialImpact;return{region:r.name,tag:r.tag,clinics:r.clinics,budgetRev:r.revenue.budget,actualRev:r.revenue.actual,totalVariance:totalVar,volumeImpact:Math.round(volImpact*10)/10,rateImpact:Math.round(rateImpact*10)/10,denialImpact:Math.round(denialImpact*10)/10,residual:Math.round(residual*10)/10,denialRate:r.denial.current,denialTarget:r.denial.target};});var totals={volumeImpact:0,rateImpact:0,denialImpact:0,totalVariance:0,residual:0};rows.forEach(function(r){totals.volumeImpact+=r.volumeImpact;totals.rateImpact+=r.rateImpact;totals.denialImpact+=r.denialImpact;totals.totalVariance+=r.totalVariance;totals.residual+=r.residual;});return{rows:rows,totals:totals,period:DB.meta.period};},
   denialAnalysis:function(regionId){var regions=regionId?DB.regions.filter(function(r){return r.id===regionId;}):DB.regions;var results=regions.map(function(r){var excessRate=Math.max(0,r.denial.current-r.denial.target);var monthlyLoss=Math.round(r.revenue.actual*excessRate/100);var annualLoss=monthlyLoss*12;var recoveryAt80=Math.round(monthlyLoss*0.8);return{region:r.name,clinics:r.clinics,currentRate:r.denial.current,targetRate:r.denial.target,excessRate:excessRate,monthlyLoss:monthlyLoss,annualLoss:annualLoss,recoverable80:recoveryAt80,collection:r.collection,topCodes:r.topDenialCodes};});var totalMonthly=0,totalAnnual=0,totalRecoverable=0;results.forEach(function(r){totalMonthly+=r.monthlyLoss;totalAnnual+=r.annualLoss;totalRecoverable+=r.recoverable80;});return{regions:results,totals:{monthlyLoss:totalMonthly,annualLoss:totalAnnual,recoverable:totalRecoverable}};},
-  expenseVariance:function(){var rows=DB.expenses.map(function(e){var v=e.actual-e.budget;return{name:e.name,category:e.category,budget:e.budget,actual:e.actual,variance:v,variancePct:e.budget?(v/e.budget*100):0,favorable:v<=0};});var totBud=0,totAct=0;rows.forEach(function(r){totBud+=r.budget;totAct+=r.actual;});return{rows:rows,totals:{budget:totBud,actual:totAct,variance:totAct-totBud}};},
+  expenseVariance:function(regionId){
+    var src=regionId&&DB.regionalExpenses[regionId]?DB.regionalExpenses[regionId]:DB.expenses;
+    var rows=src.map(function(e){var v=e.actual-e.budget;return{id:e.id,name:e.name,category:e.category,budget:e.budget,actual:e.actual,variance:v,variancePct:e.budget?Math.round(v/e.budget*1000)/10:0,favorable:v<=0};});
+    var totBud=0,totAct=0;rows.forEach(function(r){totBud+=r.budget;totAct+=r.actual;});
+    return{rows:rows,totals:{budget:totBud,actual:totAct,variance:totAct-totBud},region:regionId||"ALL"};
+  },
+  regionalPnL:function(regionId){
+    var regions=regionId?DB.regions.filter(function(r){return r.id===regionId;}):DB.regions;
+    return regions.map(function(r){
+      var regExp=DB.regionalExpenses[r.id]||[];
+      var expBud=0,expAct=0;regExp.forEach(function(e){expBud+=e.budget;expAct+=e.actual;});
+      var ebitdaBud=r.revenue.budget-expBud;var ebitdaAct=r.revenue.actual-expAct;
+      var expRows=regExp.map(function(e){var v=e.actual-e.budget;return{id:e.id,name:e.name,category:e.category,budget:e.budget,actual:e.actual,variance:v,variancePct:e.budget?Math.round(v/e.budget*1000)/10:0,favorable:v<=0};});
+      return{region:r.name,regionId:r.id,tag:r.tag,clinics:r.clinics,revenue:{budget:r.revenue.budget,actual:r.revenue.actual,variance:r.revenue.actual-r.revenue.budget},expenses:{budget:expBud,actual:expAct,variance:expAct-expBud,lines:expRows},ebitda:{budget:ebitdaBud,actual:ebitdaAct,variance:ebitdaAct-ebitdaBud,marginBud:r.revenue.budget?Math.round(ebitdaBud/r.revenue.budget*1000)/10:0,marginAct:r.revenue.actual?Math.round(ebitdaAct/r.revenue.actual*1000)/10:0}};
+    });
+  },
   forecast:function(){var sum=FE.revenueSummary();var base=sum.revenue.actual;var denialFix=FE.denialAnalysis().totals.monthlyLoss;var scenarios=[{name:"Downside",desc:"5% reimbursement cut",months:[]},{name:"Base",desc:"Current trajectory",months:[]},{name:"Upside",desc:"Full denial fix + 2% growth",months:[]}];for(var m=1;m<=12;m++){scenarios[0].months.push({month:m,revenue:Math.round(base*Math.pow(0.996,m))});scenarios[1].months.push({month:m,revenue:Math.round(base+denialFix*0.05*m)});scenarios[2].months.push({month:m,revenue:Math.round(base+denialFix*0.1*m+base*0.002*m)});}scenarios.forEach(function(sc){sc.annualRevenue=sc.months.reduce(function(s,m){return s+m.revenue;},0);});return{baseMonthly:base,scenarios:scenarios};},
   clinicHealth:function(){return DB.regions.map(function(r){var visitPct=(r.visits.actual/r.visits.budget*100);var revPct=(r.revenue.actual/r.revenue.budget*100);var denialScore=Math.max(0,100-(r.denial.current-r.denial.target)*10);var health=Math.round((visitPct*0.3+revPct*0.3+denialScore*0.2+r.collection*0.2));return{region:r.name,clinics:r.clinics,visitPct:Math.round(visitPct*10)/10,revPct:Math.round(revPct*10)/10,denialRate:r.denial.current,collection:r.collection,healthScore:health,status:health>=90?"Healthy":health>=80?"Watch":"At Risk"};}).sort(function(a,b){return a.healthScore-b.healthScore;});},
   doctorCompImpact:function(){var sum=FE.revenueSummary();var drComp=DB.expenses.find(function(e){return e.id==="DRCOMP";});var compPct=drComp?(drComp.actual/sum.revenue.actual):0.3;return DB.regions.map(function(r){var miss=r.revenue.actual-r.revenue.budget;return{region:r.name,revenueMiss:miss,compRatio:Math.round(compPct*1000)/10,compImpact:Math.round(miss*compPct),quarterlyImpact:Math.round(miss*compPct)*3};});},
   clinicDetail:function(clinicId){var cl=CLINICS.find(function(c){return c.id===clinicId;});if(!cl)return null;var v=cl.revAct-cl.revBud;var denExcess=Math.max(0,cl.denial-(DB.meta.denialTarget||8));var denLoss=Math.round(cl.revAct*denExcess/100);var ar=DB.arAging[cl.id];var provs=DB.providerData[cl.id]||[];return{id:cl.id,name:cl.name,region:REGION_META[cl.region]?REGION_META[cl.region].name:cl.region,lat:cl.lat,lng:cl.lng,revenueBudget:cl.revBud,revenueActual:cl.revAct,variance:v,variancePct:cl.revBud?Math.round(v/cl.revBud*1000)/10:0,visits:cl.visits,denialRate:cl.denial,denialTarget:DB.meta.denialTarget||8,denialExcess:denExcess,denialLoss:denLoss,annualDenialLoss:denLoss*12,collection:cl.collection,recoverable80:Math.round(denLoss*0.8),dso:ar?ar.dso:0,pctOver90:ar?ar.pctOver90:0,totalAR:ar?ar.totalAR:0,prepaidCash:cl.prepaidCash||0,deferredRev:cl.deferredRev||0,blendedCAC:cl.blendedCAC||0,providers:provs};},
-  executiveSummary:function(){return{summary:FE.revenueSummary(),varianceBridge:FE.varianceBridge(),topDenialRegion:FE.denialAnalysis("KY"),expenseVariance:FE.expenseVariance(),forecast:FE.forecast()};},
+  executiveSummary:function(){return{summary:FE.revenueSummary(),varianceBridge:FE.varianceBridge(),topDenialRegion:FE.denialAnalysis("KY"),expenseVariance:FE.expenseVariance(),regionalPnL:FE.regionalPnL(),forecast:FE.forecast()};},
 };
 /* ═══════════════════════════════════════════════════════════════════
    AGENTS + COMPUTE MAP (preserved, +clinic detail routing)
    ═══════════════════════════════════════════════════════════════════ */
 var AGENTS=[
   {id:"maya",name:"Maya",title:"FP&A Director",color:"#4F46E5",data_access:[],skills:["route_query","decompose_task","synthesize_responses","executive_brief"],canCallOn:["raj","priya","alex","sam","jordan"],focus:"Orchestrates the team. Routes queries to specialists. Cannot access raw data directly.",sysBase:"You are Maya, FP&A Director at TVG-Medulla (30 chiropractic clinics, 6 regions, PE-backed by Vistria $16B AUM). You ORCHESTRATE the analyst team. Below is ROUTING METADATA showing which specialists were engaged and their pre-computed outputs. You do NOT recalculate. Synthesize into a concise executive brief using markdown. When decomposing complex queries, explain which specialists you routed to and why."},
-  {id:"raj",name:"Raj",title:"Variance Analyst",color:"#DC2626",data_access:["Variance_Data"],skills:["variance_bridge","volume_decomposition","rate_analysis","expense_variance"],canCallOn:["priya","jordan"],focus:"Every dollar missed, decomposed deterministically. Access: Variance_Data only.",sysBase:"You are Raj, Variance Analyst at TVG-Medulla. SKILL FILE: data_access=[Variance_Data], skills=[variance_bridge, volume_decomposition, rate_analysis, expense_variance]. Below is MATHEMATICALLY VERIFIED variance data from your authorized access. DO NOT access denial or forecast data. Format into clear executive variance commentary with markdown tables."},
+  {id:"raj",name:"Raj",title:"Variance Analyst",color:"#DC2626",data_access:["Variance_Data","Regional_PnL"],skills:["variance_bridge","volume_decomposition","rate_analysis","expense_variance","regional_ebitda"],canCallOn:["priya","jordan"],focus:"Every dollar missed, decomposed deterministically. Access: Variance_Data + Regional_PnL.",sysBase:"You are Raj, Variance Analyst at TVG-Medulla. SKILL FILE: data_access=[Variance_Data, Regional_PnL], skills=[variance_bridge, volume_decomposition, rate_analysis, expense_variance, regional_ebitda]. Below is MATHEMATICALLY VERIFIED variance data including REGIONAL P&L (per-region revenue, expenses by category, EBITDA, and margin). You can answer region-specific EBITDA, margin, and expense variance questions. DO NOT access denial or forecast data. Format into clear executive variance commentary with markdown tables."},
   {id:"priya",name:"Priya",title:"Revenue Cycle",color:"#D97706",data_access:["AR_Aging","Denial_Logs"],skills:["denial_analysis","cpt_code_audit","recovery_modeling","collection_optimization"],canCallOn:["raj","jordan"],focus:"Denial expert. Every code quantified in dollars. Access: AR_Aging, Denial_Logs only.",sysBase:"You are Priya, Revenue Cycle Specialist at TVG-Medulla. SKILL FILE: data_access=[AR_Aging, Denial_Logs], skills=[denial_analysis, cpt_code_audit, recovery_modeling, collection_optimization]. Below is MATHEMATICALLY VERIFIED denial/AR data from your authorized access. DO NOT access variance bridge or forecast data. Format into an executive denial report with CPT codes and recovery opportunity. CRITICAL RULE: When queried about AR Aging or DSO, you MUST extract and output the exact quantitative metrics for the specified clinics. You must list the specific Days_Sales_Outstanding_DSO average, the Pct_Over_90 days percentage, and the Total_AR dollar amount. Never use generic qualitative phrases like extended DSO."},
   {id:"alex",name:"Alex",title:"Forecasting",color:"#059669",data_access:["Forecast_Models"],skills:["scenario_modeling","driver_based_forecast","sensitivity_analysis","trend_projection"],canCallOn:["raj","jordan"],focus:"Driver-based forecasts. Three scenarios. Access: Forecast_Models only.",sysBase:"You are Alex, Forecasting Analyst at TVG-Medulla. SKILL FILE: data_access=[Forecast_Models], skills=[scenario_modeling, driver_based_forecast, sensitivity_analysis]. Below is MATHEMATICALLY VERIFIED forecast data. DO NOT access raw clinic data or denial logs. Format into a clear forecast summary with tables."},
   {id:"sam",name:"Sam",title:"Board Reporter",color:"#7C3AED",data_access:["PE_Metrics","SSS","CAC"],skills:["pe_commentary","board_package","investor_narrative","kpi_formatting"],canCallOn:["maya","raj"],focus:"PE-grade commentary for Vistria. Access: PE_Metrics, SSS, CAC only.",sysBase:"You are Sam, Board Reporter at TVG-Medulla. SKILL FILE: data_access=[PE_Metrics, SSS, CAC], skills=[pe_commentary, board_package, investor_narrative]. Below is MATHEMATICALLY VERIFIED PE metrics. DO NOT access raw denial logs or clinic-level data. Write 3 paragraphs of PE-style commentary. Lead with the number, explain the driver, state the corrective action."},
@@ -291,23 +330,35 @@ var AGENTS=[
 ];
 /* AGENT_COMPUTE — Enforces data_access boundaries per agent skill file */
 var AGENT_COMPUTE={
-  maya:function(q){
-    /* Maya CANNOT access raw data. She routes and receives synthesized metadata. */
-    var plan=[];var lc=q.toLowerCase();
-    if(lc.includes("variance")||lc.includes("revenue")||lc.includes("budget"))plan.push({agent:"Raj",task:"Variance bridge analysis",data:"Variance_Data"});
-    if(lc.includes("denial")||lc.includes("ar ")||lc.includes("collection")||lc.includes("kentucky")||lc.includes("ky"))plan.push({agent:"Priya",task:"Denial/AR analysis",data:"AR_Aging, Denial_Logs"});
-    if(lc.includes("forecast")||lc.includes("scenario")||lc.includes("projection"))plan.push({agent:"Alex",task:"Forecast modeling",data:"Forecast_Models"});
-    if(lc.includes("board")||lc.includes("vistria")||lc.includes("pe ")||lc.includes("investor"))plan.push({agent:"Sam",task:"PE commentary",data:"PE_Metrics, SSS, CAC"});
-    if(lc.includes("clinic")||lc.includes("health")||lc.includes("ops")||lc.includes("region"))plan.push({agent:"Jordan",task:"Clinic health scoring",data:"Clinic_Health, Ops_Metrics"});
-    if(plan.length===0)plan=[{agent:"Raj",task:"Variance overview"},{agent:"Jordan",task:"Health scoring"},{agent:"Sam",task:"Executive summary"}];
-    /* Return routing metadata + aggregated summaries from routed agents (not raw data) */
+  maya:function(q,routePlan){
+    /* Maya CANNOT access raw data. She uses the DYNAMIC ROUTER's plan. */
+    var plan=routePlan||[];
+    if(plan.length===0){
+      /* Fallback: if called without pre-routed plan, use inline intent detection */
+      var lc=q.toLowerCase();
+      if(/\b(variance|revenue|budget|expense|ebitda|margin)\b/.test(lc))plan.push({agent:"Raj",task:"Variance / P&L analysis",data:"Variance_Data, Regional_PnL"});
+      if(/\b(denial|ar |aging|collection|dso|billing|cpt)\b/.test(lc))plan.push({agent:"Priya",task:"Denial/AR analysis",data:"AR_Aging, Denial_Logs"});
+      if(/\b(forecast|scenario|projection)\b/.test(lc))plan.push({agent:"Alex",task:"Forecast modeling",data:"Forecast_Models"});
+      if(/\b(board|vistria|pe |investor|sss|cac|deferred)\b/.test(lc))plan.push({agent:"Sam",task:"PE commentary",data:"PE_Metrics, SSS, CAC"});
+      if(/\b(clinic|health|ops|utilization|provider|comp|tech.to)\b/.test(lc))plan.push({agent:"Jordan",task:"Ops analysis",data:"Clinic_Health, Ops_Metrics"});
+      if(plan.length===0)plan=[{agent:"Raj",task:"Variance overview"},{agent:"Jordan",task:"Health scoring"},{agent:"Sam",task:"Executive summary"}];
+    }
+    /* Collect pre-computed outputs from each routed specialist */
     var routed={};plan.forEach(function(p){var aid=p.agent.toLowerCase();if(AGENT_COMPUTE[aid])routed[p.agent]=AGENT_COMPUTE[aid](q);});
-    return{routing_plan:plan,specialist_outputs:routed,meta:{company:"TVG-Medulla",period:"January 2026",clinics:DB.clinicCount,orchestrator:"Maya"}};
+    return{routing_plan:plan,specialist_outputs:routed,meta:{company:"TVG-Medulla",period:"January 2026",clinics:DB.clinicCount,orchestrator:"Maya",routingMethod:"dynamic_intent"}};
   },
-  raj:function(q){/* Boundary: Variance_Data only — no denial, no forecast */
-    var lc=q.toLowerCase();if(lc.includes("expense"))return FE.expenseVariance();
+  raj:function(q){/* Boundary: Variance_Data + Regional_PnL — no denial, no forecast */
+    var lc=q.toLowerCase();
+    var rid=null;DB.regions.forEach(function(r){if(lc.includes(r.name.toLowerCase().split(" ")[0])||lc.includes(r.id.toLowerCase()))rid=r.id;});
+    /* Detect intent: expense, EBITDA/margin, or revenue variance */
+    var wantsExpense=lc.includes("expense")||lc.includes("cost")||lc.includes("spend");
+    var wantsEbitda=lc.includes("ebitda")||lc.includes("margin")||lc.includes("p&l")||lc.includes("pnl")||lc.includes("profit");
     if(lc.includes("clinic:")){var cid=q.match(/clinic:(\w+)/);if(cid){var d=FE.clinicDetail(cid[1]);return d?{id:d.id,name:d.name,revenueBudget:d.revenueBudget,revenueActual:d.revenueActual,variance:d.variance,variancePct:d.variancePct,visits:d.visits}:null;}}
-    var rid=null;DB.regions.forEach(function(r){if(lc.includes(r.name.toLowerCase().split(" ")[0]))rid=r.id;});return FE.varianceBridge(rid);
+    /* Build comprehensive response */
+    var result={varianceBridge:FE.varianceBridge(rid)};
+    if(wantsExpense||wantsEbitda||rid){result.expenseVariance=FE.expenseVariance(rid);result.regionalPnL=FE.regionalPnL(rid);}
+    if(!wantsExpense&&!wantsEbitda&&!rid){result.expenseVariance=FE.expenseVariance();result.regionalPnL=FE.regionalPnL();}
+    return result;
   },
   priya:function(q){/* Boundary: AR_Aging + Denial_Logs + Payer_Mix only — no variance bridge */
     var lc=q.toLowerCase();var rid=null;DB.regions.forEach(function(r){if(lc.includes(r.name.toLowerCase().split(" ")[0]))rid=r.id;});
@@ -560,6 +611,7 @@ export default function App(){
         CLINICS.length=0;
         parsed.clinics.forEach(function(c){CLINICS.push(c);});
         DB.expenses=parsed.expenses;
+        DB.regionalExpenses=parsed.regionalExpenses||{};
         DB.arAging=parsed.arAging;
         DB.providerData=parsed.providerData;
         DB.denialLog=parsed.denialLog;
@@ -596,43 +648,87 @@ export default function App(){
 
   var SUM=isDataLoaded?FE.revenueSummary():{revenue:{budget:0,actual:0,variance:0,variancePct:0},expenses:{budget:0,actual:0},ebitda:{budget:0,actual:0,variance:0,marginBud:0,marginAct:0},denial:{weighted:0,target:8},clinics:0,period:""};
 
+  /* ═══ DYNAMIC INTENT ROUTER — analyzes query to determine activeAgents ═══ */
+  function routeIntent(query){
+    var lc=query.toLowerCase();var agents=[];var tasks=[];
+    /* ── Financial variance / revenue / budget / expense / EBITDA / margin ── */
+    if(/\b(variance|revenue|budget|miss|expense|cost|spend|ebitda|margin|p&l|pnl|profit)\b/.test(lc)){
+      agents.push("raj");tasks.push({agent:"Raj",task:(/\b(ebitda|margin|p&l|pnl|profit)\b/.test(lc))?"Regional P&L analysis":(/\b(expense|cost|spend)\b/.test(lc))?"Expense variance analysis":"Variance bridge analysis",data:"Variance_Data, Regional_PnL"});
+    }
+    /* ── Denial / AR / collection / DSO / billing codes ── */
+    if(/\b(denial|denied|ar |ar$|aging|collection|dso|billing|cpt|payer|claim|scrub|modifier|co-4|co-16)\b/.test(lc)){
+      agents.push("priya");tasks.push({agent:"Priya",task:"Denial/AR analysis",data:"AR_Aging, Denial_Logs"});
+    }
+    /* ── Forecast / scenario / projection ── */
+    if(/\b(forecast|scenario|projection|predict|model|upside|downside|base case)\b/.test(lc)){
+      agents.push("alex");tasks.push({agent:"Alex",task:"Forecast modeling",data:"Forecast_Models"});
+    }
+    /* ── Board / PE / investor / Vistria ── */
+    if(/\b(board|vistria|pe |investor|package|commentary|sss|same.store|cac|deferred)\b/.test(lc)){
+      agents.push("sam");tasks.push({agent:"Sam",task:"PE commentary / SSS analysis",data:"PE_Metrics, SSS, CAC"});
+    }
+    /* ── Clinic ops / health / utilization / provider / comp / tech-to-doc ── */
+    if(/\b(clinic|health|ops|region|utilization|provider|tech.to|comp.ratio|doctor comp|ranking|risk)\b/.test(lc)){
+      agents.push("jordan");tasks.push({agent:"Jordan",task:"Ops / provider analysis",data:"Clinic_Health, Ops_Metrics"});
+    }
+    /* ── Region name triggers — add relevant agents for cross-cutting queries ── */
+    var hasRegion=false;DB.regions.forEach(function(r){if(lc.includes(r.name.toLowerCase().split(" ")[0])||lc.includes(r.id.toLowerCase()))hasRegion=true;});
+    if(hasRegion&&agents.indexOf("raj")<0){agents.push("raj");tasks.push({agent:"Raj",task:"Regional variance",data:"Variance_Data, Regional_PnL"});}
+    /* ── Fallback if nothing matched ── */
+    if(agents.length===0){agents=["raj","jordan","sam"];tasks=[{agent:"Raj",task:"Variance overview"},{agent:"Jordan",task:"Health scoring"},{agent:"Sam",task:"Executive summary"}];}
+    return{activeAgents:agents,routing_plan:tasks};
+  }
+
   var send=useCallback(async function(agentId,text){
     if(!text.trim()||busy)return;var a=AGENTS.find(function(x){return x.id===agentId;});
     setMsgs(function(prev){var n=Object.assign({},prev);n[agentId]=(prev[agentId]||[]).concat({role:"user",text:text});return n;});
-    setInput("");setBusy(true);setScene({type:"working",from:agentId,to:a.canCallOn[0]||"maya"});
+    setInput("");setBusy(true);
 
-    /* Maya decomposition: show routing plan in chat + Live Office */
+    /* ═══ DYNAMIC ROUTING — determine activeAgents before LLM call ═══ */
+    var route=routeIntent(text);
+    var activeAgents=route.activeAgents;
+
+    /* Set scene to animate the PRIMARY active agent (first routed) */
+    var primaryTarget=(agentId==="maya"&&activeAgents.length>0)?activeAgents[0]:a.canCallOn[0]||"maya";
+    setScene({type:"working",from:agentId,to:primaryTarget,activeAgents:activeAgents});
+
+    /* Maya decomposition: show dynamic routing plan in chat + Live Office */
     var decompTimers=[];
     if(agentId==="maya"){
-      var plan=AGENT_COMPUTE.maya(text);
-      if(plan.routing_plan&&plan.routing_plan.length>0){
-        var steps=plan.routing_plan.map(function(p){return{agent:p.agent,task:p.task||p.data||"analysis",done:false,active:false};});
+      var plan=route.routing_plan;
+      if(plan.length>0){
+        var steps=plan.map(function(p){return{agent:p.agent,task:p.task||p.data||"analysis",done:false,active:false};});
         steps[0].active=true;
         setDecomp(steps);
         setMsgs(function(prev){var n=Object.assign({},prev);n[agentId]=(prev[agentId]||[]).concat({role:"decomp",steps:steps});return n;});
-        /* Animate through agents */
+        /* Animate through ONLY the dynamically-routed agents */
         steps.forEach(function(s,i){
           decompTimers.push(setTimeout(function(){
             var aid=s.agent.toLowerCase();
-            setScene({type:"handoff",from:"maya",to:aid});
+            setScene({type:"handoff",from:"maya",to:aid,activeAgents:activeAgents});
             setDecomp(function(prev){return prev.map(function(p,pi){return{agent:p.agent,task:p.task,done:pi<i,active:pi===i};});});
           },i*800+400));
         });
         decompTimers.push(setTimeout(function(){setDecomp(function(prev){return prev.map(function(p){return{agent:p.agent,task:p.task,done:true,active:false};});});},steps.length*800+400));
       }
+    }else{
+      /* Direct agent query — still show who's active */
+      setScene({type:"working",from:agentId,to:agentId,activeAgents:[agentId]});
     }
 
-    try{var computed=AGENT_COMPUTE[agentId]?AGENT_COMPUTE[agentId](text):FE.revenueSummary();var computedJSON=JSON.stringify(computed,null,2);var sysPrompt=a.sysBase+"\n\nVERIFIED DATA (scoped to data_access: ["+a.data_access.join(", ")+"]):\n"+computedJSON;var hist=(msgs[agentId]||[]).slice(-4).filter(function(m){return m.role==="user"||m.role==="assistant";}).map(function(m){return{role:m.role==="user"?"user":"assistant",content:m.text||""};});var maxTok=agentId==="sam"?2200:1500;
+    try{/* Pass dynamic routing plan to Maya so she uses the same agents the router selected */
+      var computed;if(agentId==="maya"){computed=AGENT_COMPUTE.maya(text,route.routing_plan);}else if(AGENT_COMPUTE[agentId]){computed=AGENT_COMPUTE[agentId](text);}else{computed=FE.revenueSummary();}
+      var computedJSON=JSON.stringify(computed,null,2);var sysPrompt=a.sysBase+"\n\nVERIFIED DATA (scoped to data_access: ["+a.data_access.join(", ")+"]):\n"+computedJSON;var hist=(msgs[agentId]||[]).slice(-4).filter(function(m){return m.role==="user"||m.role==="assistant";}).map(function(m){return{role:m.role==="user"?"user":"assistant",content:m.text||""};});var maxTok=agentId==="sam"?2200:1500;
       if(!apiKey){setMsgs(function(prev){var n=Object.assign({},prev);n[agentId]=(prev[agentId]||[]).concat({role:"assistant",text:"Please set your Anthropic API key first (click the key icon in the header).",agent:a.name,agentId:agentId});return n;});setBusy(false);setScene({type:"idle",from:"maya",to:"raj"});setDecomp([]);return;}
       var res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:maxTok,system:sysPrompt,messages:hist.concat({role:"user",content:text})})});
       var data=await res.json();if(!res.ok||data.error){throw new Error(data.error?data.error.message||JSON.stringify(data.error):"API returned "+res.status);}var reply=(data.content||[]).map(function(b){return b.text||"";}).join("")||"Processing complete.";
       var u=data.usage||{};setTk(function(p){return{calls:p.calls+1,inp:p.inp+(u.input_tokens||0),out:p.out+(u.output_tokens||0)};});
-      var mentioned=AGENTS.filter(function(ag){return ag.id!==agentId&&reply.toLowerCase().includes(ag.name.toLowerCase());});
-      if(mentioned.length>0){setHandoffs(function(prev){return prev.slice(-14).concat({from:a.name,to:mentioned.map(function(x){return x.name;}).join(", "),topic:text.slice(0,50),time:new Date().toLocaleTimeString()});});setScene({type:"chat",from:agentId,to:mentioned[0].id});setTimeout(function(){setScene({type:"idle",from:"maya",to:"raj"});},4000);}
-      else{setScene({type:"handoff",from:agentId,to:a.canCallOn[0]||"maya"});setTimeout(function(){setScene({type:"idle",from:"maya",to:"raj"});},3000);}
+      /* Use dynamically-routed agents for handoff animation (not text scan) */
+      if(activeAgents.length>0){setHandoffs(function(prev){return prev.slice(-14).concat({from:a.name,to:activeAgents.map(function(aid){var ag=AGENTS.find(function(x){return x.id===aid;});return ag?ag.name:aid;}).join(", "),topic:text.slice(0,50),time:new Date().toLocaleTimeString()});});}
+      setScene({type:"chat",from:agentId,to:activeAgents[0]||a.canCallOn[0]||"maya",activeAgents:activeAgents});setTimeout(function(){setScene({type:"idle",from:"maya",to:"raj",activeAgents:[]});},4000);
       var boundary=a.data_access.length>0?"["+a.data_access.join(", ")+"]":"[routing]";
-      setMsgs(function(prev){var n=Object.assign({},prev);n[agentId]=(prev[agentId]||[]).concat({role:"assistant",text:reply,agent:a.name,agentId:agentId,computed:true,boundary:boundary});return n;});
-    }catch(err){decompTimers.forEach(function(t){clearTimeout(t);});setMsgs(function(prev){var n=Object.assign({},prev);n[agentId]=(prev[agentId]||[]).concat({role:"assistant",text:"Error: "+err.message,agent:a.name,agentId:agentId});return n;});setScene({type:"idle",from:"maya",to:"raj"});}
+      setMsgs(function(prev){var n=Object.assign({},prev);n[agentId]=(prev[agentId]||[]).concat({role:"assistant",text:reply,agent:a.name,agentId:agentId,computed:true,boundary:boundary,routedTo:activeAgents});return n;});
+    }catch(err){decompTimers.forEach(function(t){clearTimeout(t);});setMsgs(function(prev){var n=Object.assign({},prev);n[agentId]=(prev[agentId]||[]).concat({role:"assistant",text:"Error: "+err.message,agent:a.name,agentId:agentId});return n;});setScene({type:"idle",from:"maya",to:"raj",activeAgents:[]});}
     setBusy(false);setDecomp([]);setTimeout(function(){if(endRef.current)endRef.current.scrollIntoView({behavior:"smooth"});},150);
   },[msgs,busy]);
 
@@ -905,7 +1001,7 @@ export default function App(){
     <div style={{padding:"8px 24px",borderBottom:"1px solid "+C.border,display:"flex",alignItems:"center",gap:8,background:C.surface}}>
       <div style={{width:6,height:6,borderRadius:"50%",background:busy?C.warning:C.positive,animation:busy?"pulse 1.5s ease infinite":"none"}}/>
       <span style={{fontSize:10,fontWeight:600,color:busy?C.warning:C.positive,fontFamily:F.mono,textTransform:"uppercase",letterSpacing:"0.06em"}}>{busy?"Processing":"Ready"}</span>
-      {busy&&scene.from&&<span style={{fontSize:10,color:C.textDim,fontFamily:F.mono}}>{"· "+(AGENTS.find(function(a){return a.id===scene.from;})||{}).name+(scene.to?" → "+(AGENTS.find(function(a){return a.id===scene.to;})||{}).name:"")}</span>}
+      {busy&&scene.from&&<span style={{fontSize:10,color:C.textDim,fontFamily:F.mono}}>{"· "+(AGENTS.find(function(a){return a.id===scene.from;})||{}).name+(scene.activeAgents&&scene.activeAgents.length>0?" → "+scene.activeAgents.map(function(aid){var ag=AGENTS.find(function(x){return x.id===aid;});return ag?ag.name:aid;}).join(", "):scene.to?" → "+(AGENTS.find(function(a){return a.id===scene.to;})||{}).name:"")}</span>}
       {decomp.length>0&&<span style={{fontSize:10,color:C.accent,fontFamily:F.mono,marginLeft:"auto"}}>{decomp.filter(function(d){return d.done;}).length+"/"+decomp.length+" tasks"}</span>}
     </div>
     <div style={{flex:1,overflowY:"auto",padding:"16px 24px"}}><div style={{maxWidth:720,margin:"0 auto"}}>
