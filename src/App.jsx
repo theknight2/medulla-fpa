@@ -36,7 +36,7 @@ function Pix({id,size,mood,bounce,anim,frame}){var s=size||40;var p=PAL[id];if(!
    ═══════════════════════════════════════════════════════════════════ */
 var AGENTS_REF=[];
 var AGENT_LINES={maya:["Routing query...","Decomposing task","Synthesizing results","Briefing CFO"],raj:["Isolating volume variance","Rate impact: calculating","Decomposing -$325K","Residual analysis"],priya:["Scanning denial codes","CO-4: AT modifier miss","KY recovery: $85K/mo","Scrubbing claims"],alex:["Running 3 scenarios","Base case modeling","Upside: +2% organic","Forecasting month 7"],sam:["PE format: 3 paras","Lead with the number","Vistria board draft","Polishing commentary"],jordan:["Clinic health scan","KY: At Risk flagged","IL score: 94","Ranking regions"]};
-var DESK_POS={maya:{x:200,y:40},raj:{x:24,y:195},priya:{x:112,y:195},alex:{x:200,y:195},sam:{x:288,y:195},jordan:{x:376,y:195}};
+var DESK_POS={maya:{x:310,y:40},raj:{x:40,y:200},priya:{x:170,y:200},alex:{x:300,y:200},sam:{x:430,y:200},jordan:{x:560,y:200}};
 
 function LiveOffice({scene,handoffs,ebitdaVar,agents,decomp}){
   var _t=useState(0),tick=_t[0];
@@ -98,8 +98,7 @@ function LiveOffice({scene,handoffs,ebitdaVar,agents,decomp}){
       <rect x={x+dw-11} y={y+64.5} width="1.8" height="2" rx="0.9" fill="none" stroke="#D4C4A8" strokeWidth="0.4"/>
       {/* ── Coffee steam ── */}
       <g opacity={on?0.5:0.2}><circle cx={x+dw-14} cy={y+61} r="0.6" fill="#CBD5E1"><animate attributeName="cy" values={(y+61)+";"+(y+56)} dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.5;0" dur="2s" repeatCount="indefinite"/></circle><circle cx={x+dw-12.5} cy={y+60} r="0.5" fill="#CBD5E1"><animate attributeName="cy" values={(y+60)+";"+(y+54)} dur="2.5s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.4;0" dur="2.5s" repeatCount="indefinite"/></circle></g>
-      {/* ── Speech bubble (compact) ── */}
-      {sp&&on&&isFrom&&<g><rect x={x+dw/2-30} y={y-2} width="60" height="16" rx="4" fill="white" stroke={col} strokeWidth="0.6" opacity="0.92" filter="url(#shadow)"/><polygon points={(x+dw/2-2)+","+(y+14)+" "+(x+dw/2+2)+","+(y+14)+" "+(x+dw/2)+","+(y+17)} fill="white" stroke={col} strokeWidth="0.4"/><rect x={x+dw/2-3} y={y+12} width="6" height="3" fill="white"/><text x={x+dw/2} y={y+9} textAnchor="middle" fill="#475569" fontSize="5" fontFamily="monospace">{sp}</text></g>}
+      {/* ── Speech bubble removed — rendered in overlay layer ── */}
       {/* ── Name plate ── */}
       <text x={x+dw/2} y={y+(isMaya?122:112)} textAnchor="middle" fill={on?"#0F172A":"#64748B"} fontSize="7" fontWeight={on?"600":"500"} fontFamily="monospace">{a?a.name:id}</text>
       {on&&<text x={x+dw/2} y={y+(isMaya?130:120)} textAnchor="middle" fill={col} fontSize="5" fontFamily="monospace" opacity="0.7">{typing?"typing...":"active"}</text>}
@@ -135,37 +134,59 @@ function LiveOffice({scene,handoffs,ebitdaVar,agents,decomp}){
       <span style={{fontSize:9,color:C.textDim,fontFamily:F.mono}}>Live Office</span>
     </div>
     <div style={{flex:1,padding:8,overflow:"hidden"}}>
-      <svg viewBox="0 0 480 340" style={{width:"100%",height:"100%",imageRendering:"auto"}} preserveAspectRatio="xMidYMid meet">
-        <defs><filter id="shadow"><feDropShadow dx="0" dy="1" stdDeviation="2" floodOpacity="0.08"/></filter><filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-        {/* Floor */}
-        <rect x="0" y="0" width="480" height="340" rx="6" fill="#FAF8F5"/>
-        {/* Floor grid */}
-        {Array.from({length:12}).map(function(_,i){return <line key={"h"+i} x1="0" y1={i*30} x2="480" y2={i*30} stroke="#EDE9E0" strokeWidth="0.3"/>;})}
-        {Array.from({length:17}).map(function(_,i){return <line key={"v"+i} x1={i*30} y1="0" x2={i*30} y2="340" stroke="#EDE9E0" strokeWidth="0.3"/>;})}
-        {/* Wall header */}
-        <rect x="0" y="0" width="480" height="8" fill="#E2E8F0"/>
-        {/* Plants with gentle sway */}
-        {[[10,14],[450,14],[10,300],[450,300]].map(function(p,i){return <g key={"p"+i}><ellipse cx={p[0]+10} cy={p[1]+12} rx="8" ry="6" fill="#D1FAE5" opacity="0.6"/><rect x={p[0]+7} y={p[1]+14} width="6" height="8" rx="2" fill="#A3886C"/><circle cx={p[0]+10} cy={p[1]+8} r="6" fill="#34D399" opacity="0.4"><animate attributeName="cx" values={(p[0]+10)+";"+(p[0]+11)+";"+(p[0]+10)} dur={(3.5+i*0.7)+"s"} repeatCount="indefinite"/></circle><circle cx={p[0]+7} cy={p[1]+10} r="4" fill="#059669" opacity="0.3"><animate attributeName="cx" values={(p[0]+7)+";"+(p[0]+6)+";"+(p[0]+7)} dur={(4.2+i*0.5)+"s"} repeatCount="indefinite"/></circle><circle cx={p[0]+14} cy={p[1]+10} r="4" fill="#059669" opacity="0.3"><animate attributeName="cx" values={(p[0]+14)+";"+(p[0]+15)+";"+(p[0]+14)} dur={(3.8+i*0.6)+"s"} repeatCount="indefinite"/></circle></g>;})}
-        {/* Section label */}
-        <text x="240" y="30" textAnchor="middle" fill="#94A3B8" fontSize="7" fontFamily="monospace" letterSpacing="0.15em">DIRECTOR</text>
-        {/* Divider */}
-        <line x1="20" y1="170" x2="460" y2="170" stroke="#CBD5E1" strokeWidth="0.5" strokeDasharray="3,3"/>
-        <text x="240" y="188" textAnchor="middle" fill="#94A3B8" fontSize="7" fontFamily="monospace" letterSpacing="0.15em">ANALYSTS</text>
-        {/* Maya desk */}
+      <svg viewBox="0 0 700 360" style={{width:"100%",height:"100%",imageRendering:"auto"}} preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <filter id="shadow"><feDropShadow dx="0" dy="1" stdDeviation="2" floodOpacity="0.08"/></filter>
+          <filter id="bshadow"><feDropShadow dx="0" dy="2" stdDeviation="4" floodOpacity="0.15"/></filter>
+          <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        {/* ── Floor ── */}
+        <rect x="0" y="0" width="700" height="360" rx="6" fill="#FAF8F5"/>
+        {/* ── Floor grid ── */}
+        {Array.from({length:13}).map(function(_,i){return <line key={"h"+i} x1="0" y1={i*30} x2="700" y2={i*30} stroke="#EDE9E0" strokeWidth="0.3"/>;})}
+        {Array.from({length:24}).map(function(_,i){return <line key={"v"+i} x1={i*30} y1="0" x2={i*30} y2="360" stroke="#EDE9E0" strokeWidth="0.3"/>;})}
+        {/* ── Wall header ── */}
+        <rect x="0" y="0" width="700" height="8" fill="#E2E8F0"/>
+        {/* ── Director area accent ── */}
+        <rect x="260" y="12" width="180" height="160" rx="10" fill="#EEF2FF" opacity="0.5"/>
+        <rect x="260" y="12" width="180" height="160" rx="10" fill="none" stroke="#C7D2FE" strokeWidth="0.5" strokeDasharray="5,3"/>
+        {/* ── Plants with gentle sway ── */}
+        {[[15,14],[660,14],[15,310],[660,310]].map(function(p,i){return <g key={"p"+i}><ellipse cx={p[0]+10} cy={p[1]+12} rx="8" ry="6" fill="#D1FAE5" opacity="0.6"/><rect x={p[0]+7} y={p[1]+14} width="6" height="8" rx="2" fill="#A3886C"/><circle cx={p[0]+10} cy={p[1]+8} r="6" fill="#34D399" opacity="0.4"><animate attributeName="cx" values={(p[0]+10)+";"+(p[0]+11)+";"+(p[0]+10)} dur={(3.5+i*0.7)+"s"} repeatCount="indefinite"/></circle><circle cx={p[0]+7} cy={p[1]+10} r="4" fill="#059669" opacity="0.3"/><circle cx={p[0]+14} cy={p[1]+10} r="4" fill="#059669" opacity="0.3"/></g>;})}
+        {/* ── Section labels ── */}
+        <text x="350" y="28" textAnchor="middle" fill="#94A3B8" fontSize="7" fontFamily="monospace" letterSpacing="0.15em">DIRECTOR</text>
+        {/* ── Divider ── */}
+        <line x1="30" y1="178" x2="670" y2="178" stroke="#CBD5E1" strokeWidth="0.5" strokeDasharray="3,3"/>
+        <text x="350" y="194" textAnchor="middle" fill="#94A3B8" fontSize="7" fontFamily="monospace" letterSpacing="0.15em">ANALYSTS</text>
+        {/* ── Maya desk + avatar ── */}
         <DeskG id="maya" x={DESK_POS.maya.x} y={DESK_POS.maya.y} on={isOn("maya")} isFrom={scene.from==="maya"}/>
-        {/* Maya avatar — pixel-agents style frame animation */}
         <foreignObject x={DESK_POS.maya.x+20} y={DESK_POS.maya.y+2} width="44" height="44"><div xmlns="http://www.w3.org/1999/xhtml"><Pix id="maya" size={40} mood={isOn("maya")?"happy":"idle"} anim={isTyping("maya")?"type":null} frame={tick%2}/></div></foreignObject>
-        {/* Specialist desks + avatars — pixel-agents style frame animation */}
+        {/* ── Specialist desks + avatars ── */}
         {["raj","priya","alex","sam","jordan"].map(function(id){var d=DESK_POS[id];var agOn=isOn(id);return <g key={id}>
           <DeskG id={id} x={d.x} y={d.y} on={agOn} isFrom={scene.from===id}/>
           <foreignObject x={d.x+17} y={d.y+4} width="36" height="36"><div xmlns="http://www.w3.org/1999/xhtml"><Pix id={id} size={32} mood={agOn?"happy":"idle"} anim={isTyping(id)?"type":null} frame={tick%2}/></div></foreignObject>
         </g>;})}
-        {/* EBITDA wall display */}
-        <rect x="360" y="20" width="90" height="42" rx="3" fill="white" stroke="#E2E8F0" strokeWidth="0.8"/>
-        <text x="405" y="34" textAnchor="middle" fill="#94A3B8" fontSize="5.5" fontFamily="monospace">EBITDA VAR</text>
-        <text x="405" y="50" textAnchor="middle" fill={ebitdaVar<0?"#DC2626":"#059669"} fontSize="12" fontFamily="monospace" fontWeight="bold">{(ebitdaVar<0?"-$":"+$")+Math.abs(ebitdaVar)+"K"}</text>
-        {/* Data packet */}
+        {/* ── EBITDA wall display ── */}
+        <rect x="540" y="18" width="105" height="48" rx="4" fill="white" stroke="#E2E8F0" strokeWidth="0.8" filter="url(#shadow)"/>
+        <text x="592" y="34" textAnchor="middle" fill="#94A3B8" fontSize="6" fontFamily="monospace" letterSpacing="0.04em">EBITDA VAR</text>
+        <text x="592" y="54" textAnchor="middle" fill={ebitdaVar<0?"#DC2626":"#059669"} fontSize="14" fontFamily="monospace" fontWeight="bold">{(ebitdaVar<0?"-$":"+$")+Math.abs(ebitdaVar)+"K"}</text>
+        {/* ── Data packet animation ── */}
         {packetEl}
+        {/* ════ SPEECH BUBBLE OVERLAY — rendered LAST so it paints ON TOP of all foreignObjects ════ */}
+        {["maya","raj","priya","alex","sam","jordan"].map(function(aid){
+          var sp=getSpeech(aid);if(!sp)return null;
+          var a=(agents||AGENTS_REF).find(function(ag){return ag.id===aid;});var col=a?a.color:"#64748B";
+          var dp=DESK_POS[aid];var isMaya=aid==="maya";var dw=isMaya?80:68;
+          var cx=dp.x+dw/2;var by=dp.y-(isMaya?12:8);
+          var bw=114;var bh=26;var bx=cx-bw/2;var btop=by-bh;
+          return <g key={"bub-"+aid}>
+            <rect x={bx+1} y={btop+2} width={bw} height={bh} rx="10" fill="rgba(0,0,0,0.06)"/>
+            <rect x={bx} y={btop} width={bw} height={bh} rx="10" fill="white" stroke={col} strokeWidth="1.2"/>
+            <rect x={bx+3} y={btop+5} width="4" height={bh-10} rx="2" fill={col}/>
+            <path d={"M"+(cx-5)+","+by+" L"+cx+","+(by+7)+" L"+(cx+5)+","+by+" Z"} fill="white" stroke={col} strokeWidth="0.8" strokeLinejoin="round"/>
+            <rect x={cx-6} y={by-1.5} width="12" height="3" fill="white"/>
+            <text x={cx+3} y={btop+bh/2+4} textAnchor="middle" fill="#1E293B" fontSize="7.5" fontWeight="600" fontFamily="monospace">{sp}</text>
+          </g>;
+        })}
       </svg>
     </div>
     {/* Decomposition status */}
@@ -855,7 +876,7 @@ export default function App(){
   <div style={{marginBottom:8}}><span style={{fontSize:11,fontWeight:500,color:C.accent,fontFamily:F.mono,letterSpacing:"0.02em"}}>SQUAD</span></div>
   <h1 style={{fontSize:28,fontWeight:600,letterSpacing:"-0.03em",marginBottom:4,color:C.text}}>Finance Intelligence</h1>
   <p style={{fontSize:14,color:C.textDim,marginBottom:28}}>{DB.clinicCount} clinics across 6 regions. Clinic-level data aggregated deterministically.</p>
-  <div style={{border:"1px solid "+C.border,borderRadius:12,overflow:"hidden",height:420,marginBottom:20}}>
+  <div style={{border:"1px solid "+C.border,borderRadius:12,overflow:"hidden",height:460,marginBottom:20}}>
     <LiveOffice scene={scene} handoffs={handoffs} ebitdaVar={SUM.ebitda.variance} agents={AGENTS} decomp={decomp}/>
   </div>
   <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:8}}>{AGENTS.map(function(a,i){return <div key={a.id} onClick={function(){go(a);}} style={{background:"white",border:"1px solid "+C.border,borderRadius:10,padding:"16px 10px",textAlign:"center",cursor:"pointer",transition:"all 0.2s",animation:"fadeUp 0.3s ease "+(i*40)+"ms both",boxShadow:"0 1px 2px rgba(0,0,0,0.03)"}}><Pix id={a.id} size={36} mood="idle"/><div style={{fontSize:12,fontWeight:600,color:C.text,marginTop:8}}>{a.name}</div><div style={{fontSize:10,color:C.textDim,fontFamily:F.mono,marginTop:2}}>{a.title.split(" ")[0]}</div><div style={{fontSize:8,color:C.accent,fontFamily:F.mono,marginTop:4,opacity:0.7}}>{a.skills.length+" skills"}</div></div>;})}</div>
