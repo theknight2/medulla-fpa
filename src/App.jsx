@@ -35,7 +35,15 @@ function Pix({id,size,mood,bounce,anim,frame}){var s=size||40;var p=PAL[id];if(!
    LIVE OFFICE — Persistent Top-Down SVG Floor Plan (pixel-agents inspired)
    ═══════════════════════════════════════════════════════════════════ */
 var AGENTS_REF=[];
-var AGENT_LINES={maya:["Routing query...","Decomposing task","Synthesizing results","Briefing CFO"],raj:["Isolating volume variance","Rate impact: calculating","Decomposing -$325K","Residual analysis"],priya:["Scanning denial codes","CO-4: AT modifier miss","KY recovery: $85K/mo","Scrubbing claims"],alex:["Running 3 scenarios","Base case modeling","Upside: +2% organic","Forecasting month 7"],sam:["PE format: 3 paras","Lead with the number","Vistria board draft","Polishing commentary"],jordan:["Clinic health scan","KY: At Risk flagged","IL score: 94","Ranking regions"]};
+/* ── ACTION DIALOGS — dynamic text driven by the routing plan task ── */
+var ACTION_DIALOGS={
+  maya:{"default":["Routing to specialists...","Decomposing task...","Collecting specialist outputs...","Synthesizing executive brief..."]},
+  raj:{"Variance bridge analysis":["Building variance bridge...","Isolating volume vs rate impact...","Decomposing regional miss..."],"Regional P&L analysis":["Computing regional EBITDA...","Aggregating expense line items...","Calculating margin spread..."],"Expense variance analysis":["Scanning expense categories...","Budget vs actual by line...","Flagging overruns..."],"Regional variance":["Extracting regional variance...","Decomposing revenue miss...","Bridge analysis running..."],"Variance overview":["Revenue variance scan...","Isolating -$K drivers...","Bridge complete"],"default":["Isolating volume variance...","Rate impact: calculating...","Decomposing regional miss..."]},
+  priya:{"Denial/AR analysis":["Scanning denial codes by region...","Computing DSO and AR aging...","Quantifying recovery opportunity..."],"default":["Scanning denial codes...","CO-4: AT modifier miss...","Scrubbing claims..."]},
+  alex:{"Forecast modeling":["Running 3 scenarios...","Base case: current trajectory...","Upside: denial fix + growth..."],"default":["Running 3 scenarios...","Forecasting month 7..."]},
+  sam:{"PE commentary / SSS analysis":["Evaluating CAC efficiency...","Analyzing Same-Store Sales...","Drafting Vistria commentary..."],"Executive summary":["Compiling board metrics...","PE-grade KPI formatting...","Lead with the number..."],"default":["PE format: 3 paras...","Reading regional_metrics...","Polishing commentary..."]},
+  jordan:{"Ops / provider analysis":["Extracting regional utilization...","Computing tech-to-doc ratios...","Scoring clinic health..."],"Health scoring":["Scanning clinic vitals...","Risk flagging by region...","Ranking health scores..."],"default":["Reading regional_metrics...","Utilization scan...","Ranking regions..."]}
+};
 var DESK_POS={maya:{x:310,y:40},raj:{x:40,y:200},priya:{x:170,y:200},alex:{x:300,y:200},sam:{x:430,y:200},jordan:{x:560,y:200}};
 
 function LiveOffice({scene,handoffs,ebitdaVar,agents,decomp}){
@@ -60,7 +68,19 @@ function LiveOffice({scene,handoffs,ebitdaVar,agents,decomp}){
     if(dynAgents.length>0)return(dynAgents.indexOf(id)>=0&&tick>2)||scene.from===id;
     return scene.from===id||(scene.to===id&&tick>2);
   }
-  function getSpeech(id){if(!isActive)return null;if(dynAgents.length>0&&dynAgents.indexOf(id)<0&&scene.from!==id)return null;if(scene.from!==id&&scene.to!==id&&dynAgents.indexOf(id)<0)return null;var lines=AGENT_LINES[id]||["Working..."];return lines[Math.floor(tick/5)%lines.length];}
+  function getSpeech(id){
+    if(!isActive)return null;
+    /* Only show bubbles for dynamically-selected activeAgents */
+    if(dynAgents.length>0&&dynAgents.indexOf(id)<0&&scene.from!==id)return null;
+    if(dynAgents.indexOf(id)<0&&scene.from!==id&&scene.to!==id)return null;
+    /* Look up agent's assigned task from the routing plan */
+    var task=null;var rp=scene.routingPlan||[];
+    rp.forEach(function(p){if(p.agent.toLowerCase()===id)task=p.task;});
+    /* Get action-specific dialog lines, fall back to default */
+    var ad=ACTION_DIALOGS[id]||{};
+    var lines=(task&&ad[task])?ad[task]:(ad["default"]||["Working..."]);
+    return lines[Math.floor(tick/5)%lines.length];
+  }
 
   function DeskG({id,x,y,on,isFrom}){
     var a=(agents||AGENTS_REF).find(function(ag){return ag.id===id;});
@@ -296,6 +316,24 @@ function parseDataRoom(workbook){
     result.arAging[row["Clinic_ID"]]={d030:parseInt(row["0_30_Days"])||0,d3160:parseInt(row["31_60_Days"])||0,d6190:parseInt(row["61_90_Days"])||0,d90p:parseInt(row["90_Plus_Days"])||0,totalAR:parseInt(row["Total_AR"])||0,pctOver90:parseFloat(row["Pct_Over_90"])||0,dso:parseInt(row["Days_Sales_Outstanding_DSO"])||0};
     });result.extraction.push({sheet:"AR Aging",rows:arRows.length,cols:11,status:"ok"});
   }
+  /* ── 10. Regional Metrics — Pre-computed averages (CAC, Utilization, Tech-to-Doc) ── */
+  var regionNames={};Object.keys(REGION_CODE_MAP).forEach(function(name){regionNames[REGION_CODE_MAP[name]]=name;});
+  result.regionalMetrics={};
+  /* CAC averages from Clinic Export */
+  var cacByReg={};result.clinics.forEach(function(cl){if(!cacByReg[cl.region])cacByReg[cl.region]={cacSum:0,clinics:0};cacByReg[cl.region].cacSum+=cl.blendedCAC;cacByReg[cl.region].clinics++;});
+  /* Utilization + Tech-to-Doc from Provider Productivity */
+  var provByReg={};result.clinics.forEach(function(cl){var provs=result.providerData[cl.id]||[];provs.forEach(function(p){if(!provByReg[cl.region])provByReg[cl.region]={utilSum:0,techSum:0,compSum:0,providers:0};provByReg[cl.region].utilSum+=p.utilization;provByReg[cl.region].techSum+=p.techRatio;provByReg[cl.region].compSum+=p.compRatio;provByReg[cl.region].providers++;});});
+  /* Assemble per-region metrics object */
+  Object.keys(cacByReg).forEach(function(rid){
+    var c=cacByReg[rid];var p=provByReg[rid]||{utilSum:0,techSum:0,compSum:0,providers:0};
+    result.regionalMetrics[rid]={regionId:rid,regionName:regionNames[rid]||rid,clinicCount:c.clinics,providerCount:p.providers,
+      avgBlendedCAC:c.clinics?Math.round(c.cacSum/c.clinics):0,
+      avgUtilizationPct:p.providers?Math.round(p.utilSum/p.providers*10)/10:0,
+      avgTechToDocRatio:p.providers?Math.round(p.techSum/p.providers*100)/100:0,
+      avgCompRatioPct:p.providers?Math.round(p.compSum/p.providers*10)/10:0};
+  });
+  result.extraction.push({sheet:"Regional Metrics",rows:Object.keys(result.regionalMetrics).length,cols:7,status:"computed",note:"CAC+Util+TechToDoc per region"});
+
   return result;
 }
 
@@ -305,7 +343,7 @@ function parseDataRoom(workbook){
 var REGION_META={IL:{name:"Illinois",tag:"Core",denialTarget:8.0,topDenialCodes:[{code:"CO-16",pct:35,reason:"Medical necessity"},{code:"CO-4",pct:25,reason:"Modifier issue"}]},IN:{name:"Indiana",tag:"",denialTarget:8.0,topDenialCodes:[{code:"CO-16",pct:30,reason:"Medical necessity"}]},KY:{name:"Kentucky",tag:"Acquired",denialTarget:8.0,topDenialCodes:[{code:"CO-4",pct:42,reason:"Missing AT modifier"},{code:"CO-16",pct:30,reason:"Medical necessity / CPT mismatch"},{code:"PR-1",pct:12,reason:"Deductible"}]},PNW:{name:"Pacific NW",tag:"",denialTarget:8.0,topDenialCodes:[]},AZ:{name:"Arizona",tag:"",denialTarget:8.0,topDenialCodes:[{code:"CO-16",pct:40,reason:"Medical necessity"},{code:"CO-4",pct:20,reason:"Modifier"}]},MOKS:{name:"MO-KS",tag:"",denialTarget:8.0,topDenialCodes:[]}};
 
 var CLINICS=[];
-var DB={meta:{company:"TVG-Medulla",period:"January 2026",pe:"Vistria Group",peAUM:"$16B",denialTarget:8.0},get clinics(){return CLINICS;},expenses:[],regionalExpenses:{},arAging:{},providerData:{},denialLog:[],payerMix:{},monthlyTrend:{},budgetAssumptions:{},extraction:[],
+var DB={meta:{company:"TVG-Medulla",period:"January 2026",pe:"Vistria Group",peAUM:"$16B",denialTarget:8.0},get clinics(){return CLINICS;},expenses:[],regionalExpenses:{},regionalMetrics:{},arAging:{},providerData:{},denialLog:[],payerMix:{},monthlyTrend:{},budgetAssumptions:{},extraction:[],
   denialCPT:{"98940":{desc:"CMT 1-2 spinal regions",avgCharge:52},"98941":{desc:"CMT 3-4 spinal regions",avgCharge:76},"98942":{desc:"CMT 5 spinal regions",avgCharge:92},"97140":{desc:"Manual therapy",avgCharge:45}},
   get regions(){var rMap={};CLINICS.forEach(function(cl){if(!rMap[cl.region])rMap[cl.region]={id:cl.region,clinics:0,budRev:0,actRev:0,budVisits:0,actVisits:0,denialSum:0};var r=rMap[cl.region];r.clinics++;r.budRev+=cl.revBud;r.actRev+=cl.revAct;r.budVisits+=(cl.visitsBud||cl.visits);r.actVisits+=cl.visits;r.denialSum+=cl.denial;});
     return Object.keys(rMap).map(function(rid){var r=rMap[rid];var m=REGION_META[rid]||{name:rid,tag:"",denialTarget:8,topDenialCodes:[]};var avgDenial=r.denialSum/r.clinics;var avgRpvBud=r.budRev/r.clinics;var avgRpvAct=r.actRev/r.clinics;
@@ -346,8 +384,8 @@ var AGENTS=[
   {id:"raj",name:"Raj",title:"Variance Analyst",color:"#DC2626",data_access:["Variance_Data","Regional_PnL"],skills:["variance_bridge","volume_decomposition","rate_analysis","expense_variance","regional_ebitda"],canCallOn:["priya","jordan"],focus:"Every dollar missed, decomposed deterministically. Access: Variance_Data + Regional_PnL.",sysBase:"You are Raj, Variance Analyst at TVG-Medulla. SKILL FILE: data_access=[Variance_Data, Regional_PnL], skills=[variance_bridge, volume_decomposition, rate_analysis, expense_variance, regional_ebitda]. Below is MATHEMATICALLY VERIFIED variance data including REGIONAL P&L (per-region revenue, expenses by category, EBITDA, and margin). You can answer region-specific EBITDA, margin, and expense variance questions. DO NOT access denial or forecast data. Format into clear executive variance commentary with markdown tables."},
   {id:"priya",name:"Priya",title:"Revenue Cycle",color:"#D97706",data_access:["AR_Aging","Denial_Logs"],skills:["denial_analysis","cpt_code_audit","recovery_modeling","collection_optimization"],canCallOn:["raj","jordan"],focus:"Denial expert. Every code quantified in dollars. Access: AR_Aging, Denial_Logs only.",sysBase:"You are Priya, Revenue Cycle Specialist at TVG-Medulla. SKILL FILE: data_access=[AR_Aging, Denial_Logs], skills=[denial_analysis, cpt_code_audit, recovery_modeling, collection_optimization]. Below is MATHEMATICALLY VERIFIED denial/AR data from your authorized access. DO NOT access variance bridge or forecast data. Format into an executive denial report with CPT codes and recovery opportunity. CRITICAL RULE: When queried about AR Aging or DSO, you MUST extract and output the exact quantitative metrics for the specified clinics. You must list the specific Days_Sales_Outstanding_DSO average, the Pct_Over_90 days percentage, and the Total_AR dollar amount. Never use generic qualitative phrases like extended DSO."},
   {id:"alex",name:"Alex",title:"Forecasting",color:"#059669",data_access:["Forecast_Models"],skills:["scenario_modeling","driver_based_forecast","sensitivity_analysis","trend_projection"],canCallOn:["raj","jordan"],focus:"Driver-based forecasts. Three scenarios. Access: Forecast_Models only.",sysBase:"You are Alex, Forecasting Analyst at TVG-Medulla. SKILL FILE: data_access=[Forecast_Models], skills=[scenario_modeling, driver_based_forecast, sensitivity_analysis]. Below is MATHEMATICALLY VERIFIED forecast data. DO NOT access raw clinic data or denial logs. Format into a clear forecast summary with tables."},
-  {id:"sam",name:"Sam",title:"Board Reporter",color:"#7C3AED",data_access:["PE_Metrics","SSS","CAC"],skills:["pe_commentary","board_package","investor_narrative","kpi_formatting"],canCallOn:["maya","raj"],focus:"PE-grade commentary for Vistria. Access: PE_Metrics, SSS, CAC only.",sysBase:"You are Sam, Board Reporter at TVG-Medulla. SKILL FILE: data_access=[PE_Metrics, SSS, CAC], skills=[pe_commentary, board_package, investor_narrative]. Below is MATHEMATICALLY VERIFIED PE metrics. DO NOT access raw denial logs or clinic-level data. Write 3 paragraphs of PE-style commentary. Lead with the number, explain the driver, state the corrective action."},
-  {id:"jordan",name:"Jordan",title:"Ops Intel",color:"#0891B2",data_access:["Clinic_Health","Ops_Metrics"],skills:["clinic_health_scoring","regional_ranking","risk_flagging","comp_analysis"],canCallOn:["raj","priya"],focus:"Clinic vital signs. Health scores from real metrics. Access: Clinic_Health, Ops_Metrics.",sysBase:"You are Jordan, Ops Intelligence at TVG-Medulla. SKILL FILE: data_access=[Clinic_Health, Ops_Metrics], skills=[clinic_health_scoring, regional_ranking, risk_flagging, comp_analysis]. Below is MATHEMATICALLY VERIFIED clinic health data. DO NOT access forecast models or PE metrics. Format into a report with rankings, risk flags, and recommendations."},
+  {id:"sam",name:"Sam",title:"Board Reporter",color:"#7C3AED",data_access:["PE_Metrics","SSS","CAC","Regional_Metrics"],skills:["pe_commentary","board_package","investor_narrative","kpi_formatting"],canCallOn:["maya","raj"],focus:"PE-grade commentary for Vistria. Access: PE_Metrics, SSS, CAC, Regional_Metrics.",sysBase:"You are Sam, Board Reporter at TVG-Medulla. SKILL FILE: data_access=[PE_Metrics, SSS, CAC, Regional_Metrics], skills=[pe_commentary, board_package, investor_narrative]. Below is MATHEMATICALLY VERIFIED PE metrics including PRE-COMPUTED regional_metrics. DO NOT access raw denial logs or clinic-level data. Write 3 paragraphs of PE-style commentary. Lead with the number, explain the driver, state the corrective action. CRITICAL RULE: NEVER calculate CAC, Utilization_Pct, or Tech_to_Doc_Ratio by dividing expense or revenue data. ONLY read and report the exact pre-computed values from the regional_metrics JSON object. These are mathematically verified averages computed directly from source spreadsheet data."},
+  {id:"jordan",name:"Jordan",title:"Ops Intel",color:"#0891B2",data_access:["Clinic_Health","Ops_Metrics","Regional_Metrics"],skills:["clinic_health_scoring","regional_ranking","risk_flagging","comp_analysis"],canCallOn:["raj","priya"],focus:"Clinic vital signs. Health scores from real metrics. Access: Clinic_Health, Ops_Metrics, Regional_Metrics.",sysBase:"You are Jordan, Ops Intelligence at TVG-Medulla. SKILL FILE: data_access=[Clinic_Health, Ops_Metrics, Regional_Metrics], skills=[clinic_health_scoring, regional_ranking, risk_flagging, comp_analysis]. Below is MATHEMATICALLY VERIFIED clinic health data including PRE-COMPUTED regional_metrics. DO NOT access forecast models or PE metrics. Format into a report with rankings, risk flags, and recommendations. CRITICAL RULE: NEVER calculate Utilization_Pct, Tech_to_Doc_Ratio, Comp_Ratio, or Blended_CAC by dividing expense or revenue data. ONLY read and report the exact pre-computed values from the regional_metrics JSON object. These are mathematically verified averages computed directly from source spreadsheet data."},
 ];
 /* AGENT_COMPUTE — Enforces data_access boundaries per agent skill file */
 var AGENT_COMPUTE={
@@ -416,17 +454,20 @@ var AGENT_COMPUTE={
     /* Per-region breakdown for core */
     var regionSSS=[];DB.regions.filter(function(r){return r.id!=="KY";}).forEach(function(r){var regClinics=CLINICS.filter(function(c){return c.region===r.id;});var np=0,cac=0,pp=0,dr=0;regClinics.forEach(function(c){np+=c.newPatients;cac+=(c.blendedCAC*c.newPatients);pp+=c.prepaidCash;dr+=c.deferredRev;});regionSSS.push({region:r.name,clinics:r.clinics,revBud:r.revenue.budget,revAct:r.revenue.actual,variance:r.revenue.actual-r.revenue.budget,variancePct:r.revenue.budget?Math.round((r.revenue.actual-r.revenue.budget)/r.revenue.budget*1000)/10:0,newPatients:np,avgCAC:np?Math.round(cac/np):0,prepaidCash:pp,deferredRev:dr});});
     base.sssBreakdown={core:sssData.core,acquired:sssData.acquired,coreRegions:regionSSS};
+    /* ── PRE-COMPUTED REGIONAL METRICS (deterministic, no LLM math) ── */
+    base.regional_metrics=JSON.parse(JSON.stringify(DB.regionalMetrics));
     return base;
   },
-  jordan:function(q){/* Boundary: Clinic_Health, Ops_Metrics + Provider_Productivity only */var lc=q.toLowerCase();
+  jordan:function(q){/* Boundary: Clinic_Health, Ops_Metrics + Provider_Productivity + Regional_Metrics only */var lc=q.toLowerCase();
     var wantsComp=lc.includes("comp")||lc.includes("doctor")||lc.includes("provider")||lc.includes("tech-to");
+    var rid=null;DB.regions.forEach(function(r){if(lc.includes(r.name.toLowerCase().split(" ")[0])||lc.includes(r.id.toLowerCase()))rid=r.id;});
     var base=wantsComp?FE.doctorCompImpact():FE.clinicHealth();
+    /* ── PRE-COMPUTED REGIONAL METRICS (deterministic, no LLM math) ── */
+    base.regional_metrics=rid?{[rid]:DB.regionalMetrics[rid]}:JSON.parse(JSON.stringify(DB.regionalMetrics));
     /* Enrich with provider productivity — regional breakdown */
     if(Object.keys(DB.providerData).length>0){
-      /* Per-region provider aggregation */
       var regionProv={};CLINICS.forEach(function(cl){var provs=DB.providerData[cl.id];if(!provs)return;if(!regionProv[cl.region])regionProv[cl.region]={region:cl.region,providers:0,avgUtil:0,avgCompRatio:0,avgTechRatio:0,totalRevenue:0,totalComp:0,clinicDetail:[]};var rp=regionProv[cl.region];var clinicProvs=[];provs.forEach(function(p){rp.providers++;rp.avgUtil+=p.utilization;rp.avgCompRatio+=p.compRatio;rp.avgTechRatio+=p.techRatio;rp.totalRevenue+=p.revenue;rp.totalComp+=p.comp;clinicProvs.push({name:p.name,credentials:p.credentials,visits:p.visits,revenue:p.revenue,comp:p.comp,compRatio:p.compRatio,utilization:p.utilization,techRatio:p.techRatio,newPatients:p.newPatients});});rp.clinicDetail.push({clinicId:cl.id,clinicName:cl.name,providers:clinicProvs});});
       var regionProvSummary=Object.values(regionProv).map(function(rp){return{region:rp.region,providers:rp.providers,avgUtilization:rp.providers?Math.round(rp.avgUtil/rp.providers*10)/10:0,avgCompRatio:rp.providers?Math.round(rp.avgCompRatio/rp.providers*10)/10:0,avgTechToDocRatio:rp.providers?Math.round(rp.avgTechRatio/rp.providers*100)/100:0,totalRevenue:Math.round(rp.totalRevenue/1000),totalComp:Math.round(rp.totalComp/1000),clinicDetail:rp.clinicDetail};});
-      /* Global summary */
       var allProv={totalProviders:0,avgUtil:0,avgCompRatio:0,totalRevenue:0,totalComp:0};Object.values(DB.providerData).forEach(function(provs){provs.forEach(function(p){allProv.totalProviders++;allProv.avgUtil+=p.utilization;allProv.avgCompRatio+=p.compRatio;allProv.totalRevenue+=p.revenue;allProv.totalComp+=p.comp;});});
       base.providerSummary={totalProviders:allProv.totalProviders,avgUtilization:Math.round(allProv.avgUtil/allProv.totalProviders*10)/10,avgCompRatio:Math.round(allProv.avgCompRatio/allProv.totalProviders*10)/10,totalRevenue:Math.round(allProv.totalRevenue/1000),totalComp:Math.round(allProv.totalComp/1000)};
       base.providerByRegion=regionProvSummary;
@@ -633,6 +674,7 @@ export default function App(){
         parsed.clinics.forEach(function(c){CLINICS.push(c);});
         DB.expenses=parsed.expenses;
         DB.regionalExpenses=parsed.regionalExpenses||{};
+        DB.regionalMetrics=parsed.regionalMetrics||{};
         DB.arAging=parsed.arAging;
         DB.providerData=parsed.providerData;
         DB.denialLog=parsed.denialLog;
@@ -711,7 +753,7 @@ export default function App(){
 
     /* Set scene to animate the PRIMARY active agent (first routed) */
     var primaryTarget=(agentId==="maya"&&activeAgents.length>0)?activeAgents[0]:a.canCallOn[0]||"maya";
-    setScene({type:"working",from:agentId,to:primaryTarget,activeAgents:activeAgents});
+    setScene({type:"working",from:agentId,to:primaryTarget,activeAgents:activeAgents,routingPlan:route.routing_plan});
 
     /* Maya decomposition: show dynamic routing plan in chat + Live Office */
     var decompTimers=[];
@@ -726,15 +768,15 @@ export default function App(){
         steps.forEach(function(s,i){
           decompTimers.push(setTimeout(function(){
             var aid=s.agent.toLowerCase();
-            setScene({type:"handoff",from:"maya",to:aid,activeAgents:activeAgents});
+            setScene({type:"handoff",from:"maya",to:aid,activeAgents:activeAgents,routingPlan:route.routing_plan});
             setDecomp(function(prev){return prev.map(function(p,pi){return{agent:p.agent,task:p.task,done:pi<i,active:pi===i};});});
           },i*800+400));
         });
         decompTimers.push(setTimeout(function(){setDecomp(function(prev){return prev.map(function(p){return{agent:p.agent,task:p.task,done:true,active:false};});});},steps.length*800+400));
       }
     }else{
-      /* Direct agent query — still show who's active */
-      setScene({type:"working",from:agentId,to:agentId,activeAgents:[agentId]});
+      /* Direct agent query — still show who's active with routing context */
+      setScene({type:"working",from:agentId,to:agentId,activeAgents:[agentId],routingPlan:route.routing_plan});
     }
 
     try{/* Pass dynamic routing plan to Maya so she uses the same agents the router selected */
@@ -746,7 +788,7 @@ export default function App(){
       var u=data.usage||{};setTk(function(p){return{calls:p.calls+1,inp:p.inp+(u.input_tokens||0),out:p.out+(u.output_tokens||0)};});
       /* Use dynamically-routed agents for handoff animation (not text scan) */
       if(activeAgents.length>0){setHandoffs(function(prev){return prev.slice(-14).concat({from:a.name,to:activeAgents.map(function(aid){var ag=AGENTS.find(function(x){return x.id===aid;});return ag?ag.name:aid;}).join(", "),topic:text.slice(0,50),time:new Date().toLocaleTimeString()});});}
-      setScene({type:"chat",from:agentId,to:activeAgents[0]||a.canCallOn[0]||"maya",activeAgents:activeAgents});setTimeout(function(){setScene({type:"idle",from:"maya",to:"raj",activeAgents:[]});},4000);
+      setScene({type:"chat",from:agentId,to:activeAgents[0]||a.canCallOn[0]||"maya",activeAgents:activeAgents,routingPlan:route.routing_plan});setTimeout(function(){setScene({type:"idle",from:"maya",to:"raj",activeAgents:[],routingPlan:[]});},4000);
       var boundary=a.data_access.length>0?"["+a.data_access.join(", ")+"]":"[routing]";
       setMsgs(function(prev){var n=Object.assign({},prev);n[agentId]=(prev[agentId]||[]).concat({role:"assistant",text:reply,agent:a.name,agentId:agentId,computed:true,boundary:boundary,routedTo:activeAgents});return n;});
     }catch(err){decompTimers.forEach(function(t){clearTimeout(t);});setMsgs(function(prev){var n=Object.assign({},prev);n[agentId]=(prev[agentId]||[]).concat({role:"assistant",text:"Error: "+err.message,agent:a.name,agentId:agentId});return n;});setScene({type:"idle",from:"maya",to:"raj",activeAgents:[]});}
